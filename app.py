@@ -2,6 +2,7 @@ from flask import Flask, render_template, request, redirect, url_for, session, j
 import sqlite3
 import hashlib
 import json
+import os
 from datetime import datetime, timedelta
 
 app = Flask(__name__)
@@ -520,6 +521,12 @@ def logout():
     session.clear()
     return redirect(url_for('index'))
 
+# if __name__ == '__main__':
+#     init_db()
+#     app.run(debug=True)
 if __name__ == '__main__':
     init_db()
-    app.run(debug=True)
+    port = int(os.environ.get('PORT', 5000))
+    # Enable debug mode only in local development
+    debug_mode = os.environ.get('RENDER') is None  # Render sets this env var
+    app.run(host='0.0.0.0', port=port, debug=debug_mode)
