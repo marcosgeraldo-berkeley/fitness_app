@@ -12,13 +12,13 @@ A full-stack web application prototype for personalized health and fitness plann
 - **Interactive Dashboard**: Tabbed interface for workouts, meals, and grocery lists
 - **Progress Tracking**: Local storage for workout completion and meal logging
 - **Form Validation**: Client and server-side validation
+- **Calories and Macro targets**: Calculation of BMR, TDEE, and macros based on user needs
 - **Sample Data**: Pre-populated workout plans, meal plans, and grocery lists
 
 ### Work in Progress 🚧
 - ML Pipeline Integration (placeholder endpoints created)
 - Advanced meal plan generation
 - Workout plan customization
-- Restaurant recommendations
 
 ## File Structure
 
@@ -27,6 +27,7 @@ fitplan-app/
 ├── app.py                          # Main Flask application
 ├── fitplan.db                      # SQLite database (auto-created)
 ├── requirements.txt                # Python dependencies
+├── runtime.txt                     # Python version 
 ├── static/
 │   ├── css/
 │   │   ├── main.css               # Global styles
@@ -42,19 +43,21 @@ fitplan-app/
     ├── signup.html                # Registration
     ├── questionnaire_intro.html   # Onboarding start
     ├── basic_info.html            # Step 1: Basic info
-    ├── fitness_goals.html         # Step 2: Goals
-    ├── dietary_restrictions.html  # Step 3: Diet restrictions
-    ├── physical_limitations.html  # Step 4: Limitations
-    ├── equipment_access.html      # Step 5: Equipment
-    ├── profile_summary.html       # Step 6: Summary
+    ├── activity_level.html        # Step 2: Activity Level
+    ├── fitness_goals.html         # Step 3: Goals
+    ├── dietary_restrictions.html  # Step 4: Diet restrictions
+    ├── physical_limitations.html  # Step 5: Limitations
+    ├── equipment_access.html      # Step 6: Equipment
+    ├── profile_summary.html       # Step 7: Summary
     └── dashboard.html             # Main dashboard
 ```
 
 ## Setup Instructions
 
 ### Prerequisites
-- Python 3.7+
+- Python 3.9.23
 - pip (Python package manager)
+- Flask
 
 ### Installation
 
@@ -98,15 +101,16 @@ fitplan-app/
 - Start at the welcome page
 - Click "Create Account"
 - Fill in basic registration info
-- Complete the 6-step onboarding questionnaire
+- Complete the 7-step onboarding questionnaire
 
 ### 2. Onboarding Steps
 1. **Basic Info**: Age, gender, height, weight
-2. **Fitness Goals**: Weight loss, strength, muscle building, endurance
-3. **Dietary Restrictions**: Vegetarian, gluten-free, allergies, etc.
-4. **Physical Limitations**: Injuries or health considerations
-5. **Equipment Access**: Available workout equipment
-6. **Profile Summary**: Review and confirm details
+2. **Activity Level**: Sedentary, Lightly Active, Moderately Active, Very Active, Extra Active 
+3. **Fitness Goals**: Weight loss, strength, muscle building, endurance
+4. **Dietary Restrictions**: Vegetarian, gluten-free, allergies, etc.
+5. **Physical Limitations**: Injuries or health considerations
+6. **Equipment Access**: Available workout equipment
+7. **Profile Summary**: Review and confirm details
 
 ### 3. Dashboard Features
 - **Workout Tab**: Weekly workout schedule with exercise details
@@ -123,14 +127,20 @@ fitplan-app/
 ```sql
 -- User profiles with all onboarding data
 users: id, name, email, password, age, gender, weight, height, 
-       fitness_goals, dietary_restrictions, physical_limitations, 
-       available_equipment, created_at
+       activity_level, fitness_goals, dietary_restrictions, 
+       physical_limitations, available_equipment, 
+       brm, tdee, caloric_target, protein_target_g, carbs_target_g, 
+       fat_target_g, created_at
 
 -- Generated workout plans (JSON data)
 workout_plans: id, user_id, week_date, plan_data, created_at
 
 -- Generated meal plans (JSON data)  
 meal_plans: id, user_id, week_date, plan_data, created_at
+
+-- Generated grocery lists (JSON data)  
+grocery_list: id, user_id, week_date, grocery_data, created_at
+
 ```
 
 ### API Endpoints (Placeholders)
@@ -173,17 +183,3 @@ You can test the app with these values:
 - **Equipment**: Bodyweight, Dumbbells
 
 The app will generate the sample workout and meal plans automatically after onboarding.
-
-## Troubleshooting
-
-### Common Issues
-- **Database errors**: Delete `fitplan.db` and restart the app to recreate
-- **CSS not loading**: Check file paths and ensure static files are in correct directories
-- **Form validation**: JavaScript must be enabled for client-side validation
-- **Mobile display**: Test on actual devices or use browser dev tools mobile view
-
-### Development Mode
-The app runs in debug mode by default. For production:
-1. Set `app.debug = False`
-2. Use environment variables for sensitive data
-3. Use a production WSGI server like Gunicorn
