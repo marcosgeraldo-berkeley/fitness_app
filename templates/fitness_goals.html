@@ -5,15 +5,15 @@
 {% block content %}
 <div class="phone-frame">
     <div class="progress-bar">
-        <div class="progress-fill" style="width: 33%"></div>
+        <div class="progress-fill" style="width: 42%"></div>
     </div>
-    <div class="step-indicator">Step 2 of 6 • Fitness Goals</div>
+    <div class="step-indicator">Step 3 of 7 • Fitness Goals</div>
     
     <div class="scrollable-content">
         <h3 style="font-size: 18px; margin-bottom: 10px; text-align: center;">What's your primary fitness goal?</h3>
         <p style="font-size: 14px; color: #666; text-align: center; margin-bottom: 25px;">Choose the goal that matters most to you</p>
         
-        <form method="POST" action="{{ url_for('save_fitness_goals') }}" id="fitnessGoalsForm">
+        <form method="POST" action="{{ url_for('save_fitness_goals') }}" id="fitnessGoalsForm" autocomplete="off">
             <div class="goal-options">
                 <label class="goal-option" for="weight-loss">
                     <input type="radio" name="fitness_goal" value="weight-loss" id="weight-loss" required>

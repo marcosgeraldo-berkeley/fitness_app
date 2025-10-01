@@ -1,22 +1,170 @@
-/* Dashboard specific styles */
-.plan-header {
-    text-align: center;
-    margin-bottom: 20px;
+/* Fix base template wrapper - CRITICAL */
+.main-content {
+    display: contents;
 }
 
-.plan-header .app-name {
-    font-size: 18px;
+/* Ensure proper flex layout - CRITICAL */
+.phone-frame {
+    display: flex !important;
+    flex-direction: column !important;
+    height: 600px !important;
+    overflow: hidden !important;
+}
+
+.app-header {
+    flex-shrink: 0;
+    margin-bottom: 15px;
+}
+
+/* Nutrition Targets Card - Compact Version */
+.nutrition-targets-card {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-radius: 12px;
+    padding: 12px 15px;
+    margin-bottom: 15px;
+    color: white;
+    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+    flex-shrink: 0;
+}
+
+.nutrition-header {
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.calories-display {
+    font-size: 16px;
     font-weight: bold;
-    color: #333;
+    text-align: center;
+    margin-bottom: 8px;
+}
+
+.calories-label {
+    font-size: 11px;
+    font-weight: 400;
+    opacity: 0.9;
+}
+
+.macros-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+}
+
+.macro-item {
+    background: rgba(255, 255, 255, 0.15);
+    backdrop-filter: blur(10px);
+    border-radius: 8px;
+    padding: 8px;
+    text-align: center;
+}
+
+.macro-icon {
+    font-size: 16px;
     margin-bottom: 3px;
 }
 
-.plan-header .app-tagline {
+.macro-value {
+    font-size: 14px;
+    font-weight: bold;
+    margin-bottom: 1px;
+}
+
+.macro-label {
+    font-size: 9px;
+    opacity: 0.9;
+}
+
+.macro-percentage {
+    font-size: 8px;
+    opacity: 0.8;
+    margin-top: 1px;
+}
+
+.no-targets-message {
+    background: #fff3cd;
+    border-left: 4px solid #ffc107;
+    border-radius: 10px;
+    padding: 12px;
+    margin-bottom: 15px;
+    color: #856404;
     font-size: 12px;
+    flex-shrink: 0;
+}
+
+/* Tab Navigation */
+.tab-navigation {
+    display: flex;
+    background: #f0f2f5;
+    border-radius: 8px;
+    padding: 3px;
+    margin-bottom: 12px;
+    flex-shrink: 0;
+}
+
+.tab-option {
+    flex: 1;
+    padding: 8px 12px;
+    text-align: center;
+    border-radius: 6px;
+    font-size: 11px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-weight: 600;
+    background: none;
+    border: none;
     color: #666;
 }
 
-/* Tab content */
+.tab-option:hover {
+    color: #667eea;
+}
+
+.tab-option.active {
+    background: white;
+    color: #667eea;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+/* Scrollable Content - CRITICAL */
+.scrollable-content {
+    flex: 1 1 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    min-height: 0;
+    padding-right: 5px;
+}
+
+.scrollable-content::-webkit-scrollbar {
+    width: 4px;
+}
+
+.scrollable-content::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 4px;
+}
+
+.scrollable-content::-webkit-scrollbar-thumb {
+    background: #c1c1c1;
+    border-radius: 4px;
+}
+
+.scrollable-content::-webkit-scrollbar-thumb:hover {
+    background: #a8a8a8;
+}
+
+/* Navigation */
+.navigation {
+    flex-shrink: 0;
+    margin-top: 0;
+    padding-top: 12px;
+}
+
+/* Tab Content */
 .tab-content {
     display: none;
 }
@@ -25,7 +173,25 @@
     display: block;
 }
 
-/* Empty state */
+/* Plan Header */
+.plan-header {
+    text-align: center;
+    margin-bottom: 12px;
+}
+
+.plan-header .app-name {
+    font-size: 16px !important;
+    font-weight: bold;
+    color: #333;
+    margin-bottom: 3px;
+}
+
+.plan-header .app-tagline {
+    font-size: 14px;
+    color: #666;
+}
+
+/* Empty State */
 .empty-state {
     text-align: center;
     padding: 40px 20px;
@@ -37,7 +203,7 @@
     line-height: 1.5;
 }
 
-/* Workout specific styles */
+/* Workout Styles */
 .workout-day {
     background: #f8f9ff;
     border-radius: 12px;
@@ -100,7 +266,7 @@
     font-weight: 600;
 }
 
-/* Meal specific styles */
+/* Meal Styles */
 .meal-card {
     background: #f8fff8;
     border-radius: 12px;
@@ -144,7 +310,7 @@
     color: #666;
 }
 
-/* Grocery specific styles */
+/* Grocery Styles */
 .grocery-section {
     margin-bottom: 15px;
 }
@@ -208,7 +374,7 @@
     font-weight: 600;
 }
 
-/* Summary box */
+/* Summary Box */
 .summary-box {
     background: #e8f5e8;
     border-radius: 8px;
@@ -230,7 +396,7 @@
     font-size: 12px;
 }
 
-/* Alert box */
+/* Alert Box */
 .alert-box {
     background: #fff3cd;
     border-radius: 8px;
@@ -244,66 +410,7 @@
     margin: 0;
 }
 
-/* Tab navigation */
-.tab-navigation {
-    display: flex;
-    background: #f0f2f5;
-    border-radius: 8px;
-    padding: 3px;
-    margin-bottom: 15px;
-}
-
-.tab-option {
-    flex: 1;
-    padding: 8px 12px;
-    text-align: center;
-    border-radius: 6px;
-    font-size: 11px;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    font-weight: 600;
-    background: none;
-    border: none;
-    color: #666;
-}
-
-.tab-option:hover {
-    color: #667eea;
-}
-
-.tab-option.active {
-    background: white;
-    color: #667eea;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-}
-
-/* Loading states for dashboard */
-.loading-card {
-    background: #f8f9ff;
-    border-radius: 12px;
-    padding: 15px;
-    margin-bottom: 12px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    min-height: 60px;
-}
-
-.loading-spinner {
-    width: 20px;
-    height: 20px;
-    border: 2px solid #e1e8ed;
-    border-top-color: #667eea;
-    border-radius: 50%;
-    animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
-}
-
-/* Responsive adjustments for dashboard */
+/* Responsive Adjustments */
 @media (max-width: 480px) {
     .meal-header {
         flex-direction: column;

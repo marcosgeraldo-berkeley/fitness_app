@@ -8,11 +8,43 @@
 
 {% block content %}
 <div class="phone-frame">
-    <div class="app-header">
+    <div class="plan-header">
         <div class="app-logo">F</div>
         <div class="app-name">Welcome back, {{ user_name }}!</div>
-        <div class="app-tagline">Your personalized health plan</div>
     </div>
+    
+    <!-- Nutrition Targets Section -->
+    {% if nutrition_targets %}
+        <div class="nutrition-targets-card">
+            <div class="nutrition-header">
+                Your Daily Nutrition Targets
+            </div>
+            <div class="calories-display"> 🔋Daily Energy :
+                {{ nutrition_targets.calories }} <span class="calories-label">kcal</span>
+            </div>
+            <div class="macros-grid">
+                <div class="macro-item">
+                    <div class="macro-icon">🥩</div>
+                    <div class="macro-value">{{ nutrition_targets.protein_g }}g</div>
+                    <div class="macro-label">Protein ({{ nutrition_targets.protein_pct }}%)</div>
+                </div>
+                <div class="macro-item">
+                    <div class="macro-icon">🍞</div>
+                    <div class="macro-value">{{ nutrition_targets.carbs_g }}g</div>
+                    <div class="macro-label">Carbs ({{ nutrition_targets.carbs_pct }}%)</div>
+                </div>
+                <div class="macro-item">
+                    <div class="macro-icon">🥑</div>
+                    <div class="macro-value">{{ nutrition_targets.fat_g }}g</div>
+                    <div class="macro-label">Fat ({{ nutrition_targets.fat_pct }}%)</div>
+                </div>
+            </div>
+        </div>
+    {% else %}
+        <div class="no-targets-message">
+            💡 Complete your profile to see personalized nutrition targets
+        </div>
+    {% endif %}
     
     <div class="tab-navigation">
         <div class="tab-option active" data-tab="workout">Workout</div>
@@ -26,7 +58,12 @@
             {% if workout_plan %}
                 <div class="plan-header">
                     <div class="app-name">Your Workout Plan</div>
-                    <div class="app-tagline">{{ workout_plan.week }} • Back-friendly</div>
+                    <div class="app-tagline">
+                        {{ workout_plan.week }} • Back-friendly
+                        {% if workout_plan.weekly_calories_burned %}
+                            • ~{{ workout_plan.weekly_calories_burned|int }} cal/week
+                        {% endif %}
+                    </div>
                 </div>
                 
                 {% for day in workout_plan.days %}
@@ -103,13 +140,13 @@
                         <button class="btn-secondary" onclick="showFullWeekPlan()">View Full Week</button>
                     </div>
                 {% endif %}
-                
             {% else %}
                 <div class="empty-state">
                     <p>No meal plan available. Please complete your profile first.</p>
                 </div>
             {% endif %}
-        </div>        
+        </div>
+        
         <!-- Grocery Tab -->
         <div id="grocery-tab" class="tab-content">
             {% if grocery_list %}
@@ -128,26 +165,17 @@
                             <div class="grocery-item">
                                 <div class="grocery-item-name">{{ item['name'] }}</div>
                                 <div class="grocery-item-quantity">{{ item['quantity'] }}</div>
-                                <div class="grocery-item-price">{{ item['price'] }}</div>
                             </div>
                         {% endfor %}
                     </div>
                 {% endfor %}
-                
-                <div class="summary-box">
-                    <div class="summary-row">
-                        <span>Estimated total:</span>
-                        <span>{{ grocery_list.total }}</span>
-                    </div>
-                </div>
             {% else %}
                 <div class="empty-state">
                     <p>No grocery list available. Please complete your profile first.</p>
                 </div>
             {% endif %}
         </div>
-    
-</div>
+    </div>
     
     <div class="navigation">
         <a href="{{ url_for('logout') }}">
@@ -155,15 +183,13 @@
         </a>
         
         {% if workout_plan or first_day or grocery_list %}
-            <!-- Plans are available - show Start Today button -->
             <button class="btn-primary">Start Today</button>
         {% else %}
-            <!-- No plans available - show Complete Profile button -->
             <a href="{{ url_for('basic_info') }}" style="text-decoration: none;">
                 <button class="btn-primary">Complete Profile</button>
             </a>
         {% endif %}
-</div>
+    </div>
 </div>
 {% endblock %}
 

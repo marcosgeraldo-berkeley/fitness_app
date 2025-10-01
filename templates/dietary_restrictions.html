@@ -5,15 +5,15 @@
 {% block content %}
 <div class="phone-frame">
     <div class="progress-bar">
-        <div class="progress-fill" style="width: 50%"></div>
+        <div class="progress-fill" style="width: 57%"></div>
     </div>
-    <div class="step-indicator">Step 3 of 6 • Dietary Restrictions</div>
+    <div class="step-indicator">Step 4 of 7 • Dietary Restrictions</div>
     
     <div class="scrollable-content">
         <h3 style="font-size: 18px; margin-bottom: 10px; text-align: center;">Any dietary restrictions?</h3>
         <p style="font-size: 14px; color: #666; text-align: center; margin-bottom: 25px;">Select all that apply to you</p>
         
-        <form method="POST" action="{{ url_for('save_dietary_restrictions') }}" id="dietaryForm">
+        <form method="POST" action="{{ url_for('save_dietary_restrictions') }}" id="dietaryForm" autocomplete="off">
             <div class="goal-options">
                 <label class="goal-option multi-select" for="vegetarian">
                     <input type="checkbox" name="dietary_restrictions" value="vegetarian" id="vegetarian">

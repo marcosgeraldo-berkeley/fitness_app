@@ -5,15 +5,15 @@
 {% block content %}
 <div class="phone-frame">
     <div class="progress-bar">
-        <div class="progress-fill" style="width: 83%"></div>
+        <div class="progress-fill" style="width: 86%"></div>
     </div>
-    <div class="step-indicator">Step 5 of 6 • Equipment Access</div>
+    <div class="step-indicator">Step 6 of 7 • Equipment Access</div>
     
     <div class="scrollable-content">
         <h3 style="font-size: 18px; margin-bottom: 10px; text-align: center;">What equipment do you have?</h3>
         <p style="font-size: 14px; color: #666; text-align: center; margin-bottom: 25px;">Select all equipment you can access</p>
         
-        <form method="POST" action="{{ url_for('save_equipment_access') }}" id="equipmentForm">
+        <form method="POST" action="{{ url_for('save_equipment_access') }}" id="equipmentForm" autocomplete="off">
             <div class="goal-options">
                 <label class="goal-option multi-select" for="no-equipment">
                     <input type="checkbox" name="equipment" value="no-equipment" id="no-equipment">

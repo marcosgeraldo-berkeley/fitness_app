@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, session, jsonify, flash
+from flask import Flask, render_template, request, redirect, url_for, session, jsonify, flash, make_response
 import sqlite3
 import hashlib
 import json
@@ -8,7 +8,155 @@ from datetime import datetime, timedelta
 app = Flask(__name__)
 app.secret_key = 'your-secret-key-here'  # Change this in production
 
-# Database setup
+# ==================== METABOLIC CALCULATION FUNCTIONS ====================
+
+def calculate_bmr(weight_kg, height_cm, age, gender):
+    """Calculate Basal Metabolic Rate using Mifflin-St Jeor equation"""
+    if gender.lower() == 'male':
+        bmr = (10 * weight_kg) + (6.25 * height_cm) - (5 * age) + 5
+    else:  # female
+        bmr = (10 * weight_kg) + (6.25 * height_cm) - (5 * age) - 161
+    return round(bmr, 2)
+
+def calculate_tdee(bmr, activity_level):
+    """Calculate Total Daily Energy Expenditure"""
+    activity_multipliers = {
+        'sedentary': 1.2,
+        'lightly_active': 1.375,
+        'moderately_active': 1.55,
+        'very_active': 1.725,
+        'extra_active': 1.9
+    }
+    multiplier = activity_multipliers.get(activity_level, 1.2)
+    return round(bmr * multiplier, 2)
+
+def calculate_caloric_target(tdee, fitness_goal):
+    """Calculate daily caloric target based on fitness goal"""
+    adjustments = {
+        'weight_loss': -500,
+        'muscle_gain': 400,
+        'maintenance': 0,
+        'general_fitness': -250
+    }
+    adjustment = adjustments.get(fitness_goal, 0)
+    return round(tdee + adjustment, 2)
+
+def calculate_weekly_exercise_calories(workout_plan, weight_kg):
+    """Calculate total weekly calories burned from exercise"""
+    if not workout_plan:
+        return 0
+    
+    total_calories = 0
+    days = workout_plan.get('days', [])
+    
+    for day in days:
+        if 'exercises' in day and day['exercises']:
+            # Get MET value for the day's workout
+            met_value = day.get('met_value', 5.0)  # Default to moderate intensity
+            duration_min = day.get('duration_minutes', 45)  # Default 45 min
+            
+            # Calories = MET × weight_kg × duration_hours
+            calories = met_value * weight_kg * (duration_min / 60)
+            total_calories += calories
+    
+    return round(total_calories, 2)
+
+def calculate_macros(caloric_target, fitness_goal):
+    """Calculate macro targets based on fitness goal (percentage method)"""
+    macro_ratios = {
+        'weight_loss': {'protein': 0.40, 'carbs': 0.30, 'fat': 0.30},
+        'muscle_gain': {'protein': 0.30, 'carbs': 0.40, 'fat': 0.30},
+        'maintenance': {'protein': 0.25, 'carbs': 0.45, 'fat': 0.30},
+        'general_fitness': {'protein': 0.30, 'carbs': 0.40, 'fat': 0.30}
+    }
+    
+    ratios = macro_ratios.get(fitness_goal, macro_ratios['maintenance'])
+    
+    # Calculate grams (protein: 4 cal/g, carbs: 4 cal/g, fat: 9 cal/g)
+    protein_g = round((caloric_target * ratios['protein']) / 4, 1)
+    carbs_g = round((caloric_target * ratios['carbs']) / 4, 1)
+    fat_g = round((caloric_target * ratios['fat']) / 9, 1)
+    
+    return {
+        'protein_g': protein_g,
+        'carbs_g': carbs_g,
+        'fat_g': fat_g,
+        'protein_pct': int(ratios['protein'] * 100),
+        'carbs_pct': int(ratios['carbs'] * 100),
+        'fat_pct': int(ratios['fat'] * 100)
+    }
+
+def recalculate_nutrition_targets(user_id):
+    """Recalculate all nutrition targets for a user"""
+    conn = get_db_connection()
+    user = conn.execute('SELECT * FROM users WHERE id = ?', (user_id,)).fetchone()
+    
+    if not user:
+        conn.close()
+        return
+    
+    # Convert height to cm if stored as string (e.g., "5'10" or "178 cm")
+    height_cm = parse_height_to_cm(user['height'])
+    weight_kg = float(user['weight']) * 0.453592  # Convert lbs to kg
+    
+    # Calculate BMR
+    bmr = calculate_bmr(weight_kg, height_cm, user['age'], user['gender'])
+    
+    # Calculate TDEE (only if activity level is set)
+    tdee = calculate_tdee(bmr, user['activity_level']) if user['activity_level'] else bmr
+    
+    # Calculate caloric target (only if fitness goal is set)
+    caloric_target = calculate_caloric_target(tdee, user['fitness_goals']) if user['fitness_goals'] else tdee
+    
+    # Calculate macros
+    macros = calculate_macros(caloric_target, user['fitness_goals']) if user['fitness_goals'] else {'protein_g': 0, 'carbs_g': 0, 'fat_g': 0}
+    
+    # Update database
+    conn.execute('''
+        UPDATE users 
+        SET bmr = ?, tdee = ?, caloric_target = ?, 
+            protein_target_g = ?, carbs_target_g = ?, fat_target_g = ?
+        WHERE id = ?
+    ''', (bmr, tdee, caloric_target, 
+          macros['protein_g'], macros['carbs_g'], macros['fat_g'], 
+          user_id))
+    
+    conn.commit()
+    conn.close()
+    
+    return {
+        'bmr': bmr,
+        'tdee': tdee,
+        'caloric_target': caloric_target,
+        'macros': macros
+    }
+
+def parse_height_to_cm(height_str):
+    """Parse height string to centimeters"""
+    if not height_str:
+        return 170  # default
+    
+    height_str = str(height_str).strip()
+    
+    # If already in cm format
+    if 'cm' in height_str.lower():
+        return float(height_str.lower().replace('cm', '').strip())
+    
+    # If in feet/inches format (e.g., "5'10" or "5'10\"")
+    if "'" in height_str:
+        parts = height_str.replace('"', '').split("'")
+        feet = int(parts[0])
+        inches = int(parts[1]) if len(parts) > 1 and parts[1].strip() else 0
+        return round((feet * 12 + inches) * 2.54, 2)
+    
+    # If just a number, assume cm
+    try:
+        return float(height_str)
+    except:
+        return 170  # default
+
+# ==================== DATABASE SETUP ====================
+
 def init_db():
     conn = sqlite3.connect('fitplan.db')
     c = conn.cursor()
@@ -24,10 +172,17 @@ def init_db():
             gender TEXT,
             weight REAL,
             height TEXT,
+            activity_level TEXT,
             fitness_goals TEXT,
             dietary_restrictions TEXT,
             physical_limitations TEXT,
             available_equipment TEXT,
+            bmr REAL,
+            tdee REAL,
+            caloric_target REAL,
+            protein_target_g REAL,
+            carbs_target_g REAL,
+            fat_target_g REAL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
@@ -68,11 +223,11 @@ def init_db():
         )
     ''')
 
-    
     conn.commit()
     conn.close()
 
-# Register the fromjson filter
+# ==================== TEMPLATE FILTERS ====================
+
 @app.template_filter('fromjson')
 def fromjson_filter(value):
     if value is None:
@@ -92,7 +247,8 @@ def get_db_connection():
     conn.row_factory = sqlite3.Row
     return conn
 
-# Routes
+# ==================== ROUTES ====================
+
 @app.route('/')
 def index():
     return render_template('welcome.html')
@@ -118,7 +274,6 @@ def register():
                     (name, email, hash_password(password)))
         conn.commit()
         
-        # Get the user ID
         user = conn.execute('SELECT * FROM users WHERE email = ?', (email,)).fetchone()
         session['user_id'] = user['id']
         session['user_name'] = user['name']
@@ -176,7 +331,38 @@ def save_basic_info():
     conn.commit()
     conn.close()
     
+    # Recalculate after basic info update
+    recalculate_nutrition_targets(session['user_id'])
+    
+    return redirect(url_for('activity_level'))
+
+# ==================== NEW ACTIVITY LEVEL ROUTES ====================
+
+@app.route('/activity-level')
+def activity_level():
+    if 'user_id' not in session:
+        return redirect(url_for('index'))
+    return render_template('activity_level.html')
+
+@app.route('/save-activity-level', methods=['POST'])
+def save_activity_level():
+    if 'user_id' not in session:
+        return redirect(url_for('index'))
+    
+    activity = request.form['activity_level']
+    
+    conn = get_db_connection()
+    conn.execute('UPDATE users SET activity_level = ? WHERE id = ?',
+                (activity, session['user_id']))
+    conn.commit()
+    conn.close()
+    
+    # Recalculate after activity level update
+    recalculate_nutrition_targets(session['user_id'])
+    
     return redirect(url_for('fitness_goals'))
+
+# ==================== CONTINUING ROUTES ====================
 
 @app.route('/fitness-goals')
 def fitness_goals():
@@ -196,6 +382,9 @@ def save_fitness_goals():
                 (goals, session['user_id']))
     conn.commit()
     conn.close()
+    
+    # Recalculate after fitness goals update
+    recalculate_nutrition_targets(session['user_id'])
     
     return redirect(url_for('dietary_restrictions'))
 
@@ -282,12 +471,15 @@ def create_plan():
     if 'user_id' not in session:
         return redirect(url_for('index'))
     
-    # This will call your ML pipeline later
-    # For now, just create placeholder plans
     user_id = session['user_id']
     week_date = datetime.now().strftime('%Y-%m-%d')
     
-    # Sample workout plan data
+    # Get user data for calculations
+    conn = get_db_connection()
+    user = conn.execute('SELECT * FROM users WHERE id = ?', (user_id,)).fetchone()
+    weight_kg = float(user['weight']) * 0.453592  # Convert lbs to kg
+    
+    # Sample workout plan data WITH MET VALUES
     workout_data = {
         "week": "March 18-24",
         "days": [
@@ -295,6 +487,8 @@ def create_plan():
                 "day": "Monday",
                 "title": "Upper Body Push",
                 "duration": "45 min",
+                "duration_minutes": 45,
+                "met_value": 5.0,
                 "exercises": [
                     {"name": "Dumbbell Chest Press", "sets": "3 × 12"},
                     {"name": "Dumbbell Shoulder Press", "sets": "3 × 10"},
@@ -306,12 +500,16 @@ def create_plan():
                 "day": "Tuesday",
                 "title": "Rest Day",
                 "duration": "—",
+                "duration_minutes": 0,
+                "met_value": 0,
                 "description": "Recovery day. Light walking or gentle stretching recommended."
             },
             {
                 "day": "Wednesday", 
                 "title": "Upper Body Pull",
                 "duration": "40 min",
+                "duration_minutes": 40,
+                "met_value": 5.0,
                 "exercises": [
                     {"name": "Dumbbell Bent-Over Rows", "sets": "3 × 12"},
                     {"name": "Single-Arm Rows", "sets": "3 × 10 each"},
@@ -323,12 +521,16 @@ def create_plan():
                 "day": "Thursday",
                 "title": "Rest Day", 
                 "duration": "—",
+                "duration_minutes": 0,
+                "met_value": 0,
                 "description": "Active recovery. 20-30 minutes of walking recommended."
             },
             {
                 "day": "Friday",
                 "title": "Lower Body",
                 "duration": "35 min",
+                "duration_minutes": 35,
+                "met_value": 6.0,
                 "exercises": [
                     {"name": "Bodyweight Squats", "sets": "3 × 15"},
                     {"name": "Dumbbell Lunges", "sets": "3 × 10 each"},
@@ -340,6 +542,8 @@ def create_plan():
                 "day": "Saturday",
                 "title": "Core & Cardio",
                 "duration": "30 min", 
+                "duration_minutes": 30,
+                "met_value": 7.0,
                 "exercises": [
                     {"name": "Modified Planks", "sets": "3 × 30s"},
                     {"name": "Seated Russian Twists", "sets": "3 × 20"},
@@ -350,15 +554,21 @@ def create_plan():
                 "day": "Sunday",
                 "title": "Rest Day",
                 "duration": "—",
+                "duration_minutes": 0,
+                "met_value": 0,
                 "description": "Complete rest or light yoga/stretching."
             }
         ]
     }
     
+    # Calculate weekly exercise calories
+    weekly_exercise_cal = calculate_weekly_exercise_calories(workout_data, weight_kg)
+    workout_data['weekly_calories_burned'] = weekly_exercise_cal
+    
     # Sample meal plan data
     meal_data = {
         "week": "March 18-24",
-        "daily_calories": 1650,
+        "daily_calories": user['caloric_target'] if user['caloric_target'] else 1650,
         "days": {
             "Monday": {
                 "date": "March 18",
@@ -399,34 +609,31 @@ def create_plan():
             {
                 "title": "🥬 Produce",
                 "items": [
-                    {"name": "Blueberries", "quantity": "2 cups", "price": "$4.99"},
-                    {"name": "Broccoli crowns", "quantity": "2 heads", "price": "$3.50"},
-                    {"name": "Sweet potatoes", "quantity": "3 medium", "price": "$2.99"},
-                    {"name": "Apples", "quantity": "4 large", "price": "$3.99"}
+                    {"name": "Blueberries", "quantity": "2 cups"},
+                    {"name": "Broccoli crowns", "quantity": "2 heads"},
+                    {"name": "Sweet potatoes", "quantity": "3 medium"},
+                    {"name": "Apples", "quantity": "4 large"}
                 ]
             },
             {
                 "title": "🥩 Protein", 
                 "items": [
-                    {"name": "Chicken breast", "quantity": "2 lbs", "price": "$8.99"},
-                    {"name": "Salmon fillets", "quantity": "4 pieces", "price": "$16.99"},
-                    {"name": "Greek yogurt (plain)", "quantity": "32 oz", "price": "$5.99"}
+                    {"name": "Chicken breast", "quantity": "2 lbs"},
+                    {"name": "Salmon fillets", "quantity": "4 pieces"},
+                    {"name": "Greek yogurt (plain)", "quantity": "32 oz"}
                 ]
             },
             {
                 "title": "🌾 Pantry",
                 "items": [
-                    {"name": "Quinoa", "quantity": "1 lb bag", "price": "$6.99"},
-                    {"name": "GF granola", "quantity": "1 box", "price": "$7.49"},
-                    {"name": "Almond butter", "quantity": "1 jar", "price": "$8.99"},
-                    {"name": "Tahini", "quantity": "1 container", "price": "$6.99"}
+                    {"name": "Quinoa", "quantity": "1 lb bag"},
+                    {"name": "GF granola", "quantity": "1 box"},
+                    {"name": "Almond butter", "quantity": "1 jar"},
+                    {"name": "Tahini", "quantity": "1 container"}
                 ]
             }
         ],
-        "total": "$89.50"
     }
-    
-    conn = get_db_connection()
     
     # Save workout plan
     conn.execute('INSERT INTO workout_plans (user_id, week_date, plan_data) VALUES (?, ?, ?)',
@@ -443,8 +650,6 @@ def create_plan():
     conn.commit()
     conn.close()
     
-    
-    
     return redirect(url_for('dashboard'))
 
 @app.route('/dashboard')
@@ -453,6 +658,9 @@ def dashboard():
         return redirect(url_for('index'))
     
     conn = get_db_connection()
+    
+    # Get user nutrition data
+    user = conn.execute('SELECT * FROM users WHERE id = ?', (session['user_id'],)).fetchone()
     
     # Get latest plans
     workout_plan = conn.execute('SELECT * FROM workout_plans WHERE user_id = ? ORDER BY created_at DESC LIMIT 1',
@@ -472,35 +680,46 @@ def dashboard():
     # Extract first day from meal_data for dashboard preview
     first_day = None
     if meal_data:
-        # Handle different possible structures of meal_data
         if isinstance(meal_data, list) and len(meal_data) > 0:
-            # If meal_data is a list of days
             first_day = meal_data[0]
         elif isinstance(meal_data, dict):
-            # If meal_data is a dict, check for common keys
             if 'days' in meal_data and meal_data['days']:
-                first_day_key = next(iter(meal_data['days']))  # Gets first key
+                first_day_key = next(iter(meal_data['days']))
                 first_day = meal_data['days'][first_day_key]
-                # Add the day name to the first_day object for display
                 first_day['day_name'] = first_day_key
             elif 'meal_plan' in meal_data and meal_data['meal_plan']:
                 if isinstance(meal_data['meal_plan'], list):
                     first_day = meal_data['meal_plan'][0]
                 else:
-                    # If meal_plan is also a dict
                     first_day_key = next(iter(meal_data['meal_plan']))
                     first_day = meal_data['meal_plan'][first_day_key]
             elif 'day_1' in meal_data:
                 first_day = meal_data['day_1']
             else:
-                # If it's a single day object, use it directly
                 first_day = meal_data
+    
+    # Prepare nutrition targets
+    nutrition_targets = None
+    if user and user['caloric_target']:
+        nutrition_targets = {
+            'calories': int(user['caloric_target']),
+            'protein_g': round(user['protein_target_g'], 1) if user['protein_target_g'] else 0,
+            'carbs_g': round(user['carbs_target_g'], 1) if user['carbs_target_g'] else 0,
+            'fat_g': round(user['fat_target_g'], 1) if user['fat_target_g'] else 0
+        }
+        
+        # Calculate percentages
+        if nutrition_targets['calories'] > 0:
+            nutrition_targets['protein_pct'] = int((nutrition_targets['protein_g'] * 4 / nutrition_targets['calories']) * 100)
+            nutrition_targets['carbs_pct'] = int((nutrition_targets['carbs_g'] * 4 / nutrition_targets['calories']) * 100)
+            nutrition_targets['fat_pct'] = int((nutrition_targets['fat_g'] * 9 / nutrition_targets['calories']) * 100)
     
     return render_template('dashboard.html', 
                          workout_plan=workout_data,
                          meal_plan=meal_data,
-                         first_day=first_day,  # Add this new variable
+                         first_day=first_day,
                          grocery_list=grocery_data,
+                         nutrition_targets=nutrition_targets,
                          user_name=session.get('user_name'))
 
 # Placeholder API endpoints for plan generation
@@ -519,14 +738,14 @@ def generate_grocery_list():
 @app.route('/logout')
 def logout():
     session.clear()
-    return redirect(url_for('index'))
+    response = make_response(redirect(url_for('index')))
+    response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    response.headers['Pragma'] = 'no-cache'
+    response.headers['Expires'] = '0'
+    return response
 
-# if __name__ == '__main__':
-#     init_db()
-#     app.run(debug=True)
 if __name__ == '__main__':
     init_db()
     port = int(os.environ.get('PORT', 5000))
-    # Enable debug mode only in local development
-    debug_mode = os.environ.get('RENDER') is None  # Render sets this env var
+    debug_mode = os.environ.get('RENDER') is None
     app.run(host='0.0.0.0', port=port, debug=debug_mode)
