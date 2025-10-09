@@ -4,9 +4,47 @@ import hashlib
 import json
 import os
 from datetime import datetime, timedelta
+from recipes_client import get_one_day_meal_plan
+import logging
+from logging.config import dictConfig
+import sys
+
+dictConfig({
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "default": {
+            "format": "%(asctime)s %(levelname)s %(name)s: %(message)s"
+        }
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "stream": "ext://sys.stdout",
+            "formatter": "default",
+        }
+    },
+    "root": {
+        "level": "INFO",
+        "handlers": ["console"]
+    }
+})
 
 app = Flask(__name__)
 app.secret_key = 'your-secret-key-here'  # Change this in production
+
+# If you want DEBUG-level app logs:
+app.logger.setLevel(logging.DEBUG)
+
+# Optional: show HTTP requests when using app.run(...)
+logging.getLogger("werkzeug").setLevel(logging.INFO)
+
+# Configure root logger
+logging.basicConfig(
+    level=logging.INFO,  # or DEBUG for more verbosity
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    handlers=[logging.StreamHandler(sys.stdout)]  # send to Docker logs
+)
 
 # ====================INITIALIZE WORKOUT GENERATOR ====================
 from workout_generator import WorkoutGenerator
@@ -508,6 +546,16 @@ def create_plan():
         # Get user data for meal calculations
         conn = get_db_connection()
         user = conn.execute('SELECT * FROM users WHERE id = ?', (user_id,)).fetchone()
+
+        # Base off of caloric target only at this point
+        caloric_target = user['caloric_target'] if user['caloric_target'] else 1650
+
+        # Dietary restrictions
+        dietary = json.loads(user['dietary_restrictions']) if user['dietary_restrictions'] else []
+        logging.info(dietary)
+
+        meals = get_one_day_meal_plan(caloric_target, dietary)
+        logging.info(meals)
         
         # Sample meal plan data (you'll replace this with your meal generator later)
         meal_data = {
@@ -516,35 +564,11 @@ def create_plan():
             "days": {
                 "Monday": {
                     "date": datetime.now().strftime("%B %d"),
-                    "meals": [
-                        {
-                            "title": "🌅 Breakfast",
-                            "calories": 420,
-                            "description": "Greek Yogurt Parfait with gluten-free granola and blueberries",
-                            "macros": {"protein": "25g", "carbs": "45g", "fat": "18g"}
-                        },
-                        {
-                            "title": "🥗 Lunch", 
-                            "calories": 480,
-                            "description": "Grilled Chicken Quinoa Bowl with roasted vegetables",
-                            "macros": {"protein": "32g", "carbs": "42g", "fat": "16g"}
-                        },
-                        {
-                            "title": "🍽️ Dinner",
-                            "calories": 520,
-                            "description": "Baked Salmon with sweet potato and steamed broccoli", 
-                            "macros": {"protein": "35g", "carbs": "38g", "fat": "22g"}
-                        },
-                        {
-                            "title": "🥜 Snacks",
-                            "calories": 230,
-                            "description": "Apple with almond butter, herbal tea",
-                            "macros": {"protein": "8g", "carbs": "22g", "fat": "14g"}
-                        }
-                    ]
+                    "meals": meals
                 }
             }
         }
+        logging.info(meal_data)
         
         # Sample grocery list
         grocery_data = {
