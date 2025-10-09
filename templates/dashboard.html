@@ -19,7 +19,7 @@
             <div class="nutrition-header">
                 Your Daily Nutrition Targets
             </div>
-            <div class="calories-display"> 🔋Daily Energy :
+            <div class="calories-display">📋 Daily Energy :
                 {{ nutrition_targets.calories }} <span class="calories-label">kcal</span>
             </div>
             <div class="macros-grid">
@@ -46,153 +46,134 @@
         </div>
     {% endif %}
     
-    <div class="tab-navigation">
-        <div class="tab-option active" data-tab="workout">Workout</div>
-        <div class="tab-option" data-tab="meals">Meals</div>
-        <div class="tab-option" data-tab="grocery">Grocery</div>
-    </div>
-    
     <div class="scrollable-content">
-        <!-- Workout Plan Tab -->
-        <div id="workout-tab" class="tab-content active">
-            {% if workout_plan %}
-                <div class="plan-header">
-                    <div class="app-name">Your Workout Plan</div>
-                    <div class="app-tagline">
-                        {{ workout_plan.week }} • Back-friendly
-                        {% if workout_plan.weekly_calories_burned %}
-                            • ~{{ workout_plan.weekly_calories_burned|int }} cal/week
-                        {% endif %}
+        <!-- Quick Stats -->
+        {% if workout_plan %}
+        <div class="workout-stats">
+            {% if workout_plan.workout_days_per_week %}
+            <div class="stat-item">
+                <span class="stat-value">{{ workout_plan.workout_days_per_week }}</span>
+                <span class="stat-label">Workouts/Week</span>
+            </div>
+            {% endif %}
+            
+            {% if workout_plan.total_weekly_calories %}
+            <div class="stat-item">
+                <span class="stat-value">{{ workout_plan.total_weekly_calories|int }}</span>
+                <span class="stat-label">Weekly Calories</span>
+            </div>
+            {% endif %}
+            
+            {% if workout_plan.fitness_level %}
+            <div class="stat-item">
+                <span class="stat-value">{{ workout_plan.fitness_level|title }}</span>
+                <span class="stat-label">Fitness Level</span>
+            </div>
+            {% endif %}
+        </div>
+        {% endif %}
+        
+        <!-- Navigation Cards -->
+        <div style="margin-top: 20px;">
+            <a href="{{ url_for('workout_page') }}" style="text-decoration: none;">
+                <div class="workout-day" style="cursor: pointer;">
+                    <div class="workout-day-header">
+                        <div>
+                            <div class="workout-day-title">💪 Your Workout Plan</div>
+                            <p style="font-size: 11px; color: #666; margin: 4px 0 0 0;">
+                                {% if workout_plan %}
+                                    View your personalized {{ workout_plan.workout_days_per_week }}-day workout schedule
+                                {% else %}
+                                    Create your personalized workout plan
+                                {% endif %}
+                            </p>
+                        </div>
+                        <div style="font-size: 20px; color: #667eea;">→</div>
                     </div>
                 </div>
-                
-                {% for day in workout_plan.days %}
-                    {% if day.exercises %}
-                        <div class="workout-day">
-                            <div class="workout-day-header">
-                                <div class="workout-day-title">{{ day.day }} - {{ day.title }}</div>
-                                <div class="workout-day-duration">{{ day.duration }}</div>
-                            </div>
-                            {% for exercise in day.exercises %}
-                                <div class="exercise-item">
-                                    <div class="exercise-name">{{ exercise.name }}</div>
-                                    <div class="exercise-details">{{ exercise.sets }}</div>
-                                </div>
-                            {% endfor %}
+            </a>
+            
+            <a href="{{ url_for('meals_page') }}" style="text-decoration: none;">
+                <div class="workout-day" style="cursor: pointer; border-left-color: #52c41a; background: #f8fff8;">
+                    <div class="workout-day-header">
+                        <div>
+                            <div class="workout-day-title">🥗 Your Meal Plan</div>
+                            <p style="font-size: 11px; color: #666; margin: 4px 0 0 0;">
+                                {% if first_day %}
+                                    View your daily meal recommendations
+                                {% else %}
+                                    Create your personalized meal plan
+                                {% endif %}
+                            </p>
                         </div>
-                    {% else %}
-                        <div class="workout-day rest">
-                            <div class="workout-day-header">
-                                <div class="workout-day-title">{{ day.day }} - {{ day.title }}</div>
-                                <div class="workout-day-duration">{{ day.duration }}</div>
-                            </div>
-                            <p style="font-size: 12px; color: #666; margin: 0;">{{ day.description }}</p>
+                        <div style="font-size: 20px; color: #52c41a;">→</div>
+                    </div>
+                </div>
+            </a>
+            
+            <a href="{{ url_for('grocery_page') }}" style="text-decoration: none;">
+                <div class="workout-day" style="cursor: pointer; border-left-color: #fa8c16; background: #fffaf0;">
+                    <div class="workout-day-header">
+                        <div>
+                            <div class="workout-day-title">🛒 Shopping List</div>
+                            <p style="font-size: 11px; color: #666; margin: 4px 0 0 0;">
+                                {% if grocery_list %}
+                                    View your weekly grocery list
+                                {% else %}
+                                    Create your shopping list
+                                {% endif %}
+                            </p>
                         </div>
-                    {% endif %}
-                {% endfor %}
-                
-                <div class="alert-box">
-                    <p class="alert-text">💡 All exercises modified for your profile. Stop if you feel pain.</p>
+                        <div style="font-size: 20px; color: #fa8c16;">→</div>
+                    </div>
                 </div>
-            {% else %}
-                <div class="empty-state">
-                    <p>No workout plan available. Please complete your profile first.</p>
-                </div>
-            {% endif %}
+            </a>
         </div>
         
-        <!-- Meals Tab -->
-        <div id="meals-tab" class="tab-content">
-            {% if first_day %}
-                <div class="plan-header">
-                    <div class="app-name">Your Meal Plan</div>
-                    <div class="app-tagline">{{ meal_plan.daily_calories or 'Custom' }} cal/day • Gluten-free</div>
-                </div>
-                
-                <h3 style="font-size: 14px; margin-bottom: 10px; text-align: center; color: #333;">
-                    Today, {{ first_day.date }}
-                </h3>
-                
-                {% for meal in first_day.meals %}
-                    <div class="meal-card">
-                        <div class="meal-header">
-                            <div class="meal-title">{{ meal.title }}</div>
-                            <div class="meal-calories">{{ meal.calories }} cal</div>
-                        </div>
-                        <div class="meal-description">{{ meal.description }}</div>
-                        <div class="macros">
-                            <span>P: {{ meal.macros.protein }}</span>
-                            <span>C: {{ meal.macros.carbs }}</span>
-                            <span>F: {{ meal.macros.fat }}</span>
-                        </div>
-                    </div>
-                {% endfor %}
-                
-                <div class="summary-box">
-                    <div class="summary-row">
-                        <span>Daily Total:</span>
-                        <span>{{ meal_plan.daily_calories or first_day.total_calories or 'N/A' }} calories</span>
-                    </div>
-                </div>
-                
-                {% if meal_plan and meal_plan.days and meal_plan.days|length > 1 %}
-                    <div style="text-align: center; margin-top: 15px;">
-                        <button class="btn-secondary" onclick="showFullWeekPlan()">View Full Week</button>
-                    </div>
-                {% endif %}
-            {% else %}
-                <div class="empty-state">
-                    <p>No meal plan available. Please complete your profile first.</p>
-                </div>
-            {% endif %}
+        {% if not workout_plan and not first_day %}
+        <div class="alert-box" style="margin-top: 20px;">
+            <p class="alert-text">💡 Complete your profile to generate your personalized plans</p>
         </div>
-        
-        <!-- Grocery Tab -->
-        <div id="grocery-tab" class="tab-content">
-            {% if grocery_list %}
-                <div class="plan-header">
-                    <div class="app-name">Shopping List</div>
-                    <div class="app-tagline">{{ grocery_list.week }} • Organized by aisle</div>
-                </div>
-                
-                {% for section in grocery_list.sections %}
-                    <div class="grocery-section">
-                        <div class="grocery-section-title">
-                            <span class="grocery-section-icon">{{ section.title.split(' ')[0] }}</span>
-                            {{ section.title.split(' ', 1)[1] }}
-                        </div>
-                        {% for item in section['items'] %}
-                            <div class="grocery-item">
-                                <div class="grocery-item-name">{{ item['name'] }}</div>
-                                <div class="grocery-item-quantity">{{ item['quantity'] }}</div>
-                            </div>
-                        {% endfor %}
-                    </div>
-                {% endfor %}
-            {% else %}
-                <div class="empty-state">
-                    <p>No grocery list available. Please complete your profile first.</p>
-                </div>
-            {% endif %}
-        </div>
+        {% endif %}
     </div>
     
     <div class="navigation">
-        <a href="{{ url_for('logout') }}">
-            <button class="btn-secondary">Logout</button>
+        <a href="{{ url_for('profile_summary') }}">
+            <button class="btn-secondary">View Profile</button>
         </a>
-        
-        {% if workout_plan or first_day or grocery_list %}
-            <button class="btn-primary">Start Today</button>
-        {% else %}
-            <a href="{{ url_for('basic_info') }}" style="text-decoration: none;">
-                <button class="btn-primary">Complete Profile</button>
-            </a>
-        {% endif %}
+        <a href="{{ url_for('logout') }}">
+            <button class="btn-primary">Logout</button>
+        </a>
     </div>
 </div>
-{% endblock %}
 
-{% block extra_js %}
-<script src="{{ url_for('static', filename='js/plans.js') }}"></script>
+<style>
+    /* Reuse existing workout-stats style */
+    .workout-stats {
+        display: flex;
+        justify-content: space-around;
+        background: linear-gradient(135deg, #e6f2ff 0%, #f0f8ff 100%);
+        border-radius: 10px;
+        padding: 12px;
+        margin-bottom: 15px;
+        font-size: 11px;
+    }
+    
+    .stat-item {
+        text-align: center;
+    }
+    
+    .stat-value {
+        font-size: 16px;
+        font-weight: bold;
+        color: #667eea;
+        display: block;
+    }
+    
+    .stat-label {
+        color: #666;
+        font-size: 10px;
+        margin-top: 2px;
+    }
+</style>
 {% endblock %}

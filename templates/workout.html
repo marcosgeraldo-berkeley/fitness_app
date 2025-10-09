@@ -1,0 +1,481 @@
+{% extends "base.html" %}
+
+{% block title %}FitPlan - Workout Plan{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+<style>
+    .workout-stats {
+        display: flex;
+        justify-content: space-around;
+        background: linear-gradient(135deg, #e6f2ff 0%, #f0f8ff 100%);
+        border-radius: 10px;
+        padding: 12px;
+        margin-bottom: 15px;
+        font-size: 11px;
+    }
+    
+    .stat-item {
+        text-align: center;
+    }
+    
+    .stat-value {
+        font-size: 16px;
+        font-weight: bold;
+        color: #667eea;
+        display: block;
+    }
+    
+    .stat-label {
+        color: #666;
+        font-size: 10px;
+        margin-top: 2px;
+    }
+    
+    .exercise-details-toggle {
+        background: none;
+        border: none;
+        color: #667eea;
+        font-size: 10px;
+        cursor: pointer;
+        padding: 4px 8px;
+        margin-top: 4px;
+        text-decoration: underline;
+    }
+    
+    .exercise-expanded {
+        background: #f0f8ff;
+        border-radius: 8px;
+        padding: 10px;
+        margin-top: 8px;
+        font-size: 11px;
+        display: none;
+    }
+    
+    .exercise-expanded.show {
+        display: block;
+    }
+    
+    .exercise-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-bottom: 8px;
+    }
+    
+    .meta-tag {
+        background: white;
+        border: 1px solid #e1e8ed;
+        border-radius: 12px;
+        padding: 3px 8px;
+        font-size: 10px;
+        color: #666;
+    }
+    
+    .meta-tag.muscles {
+        border-color: #667eea;
+        color: #667eea;
+    }
+    
+    .meta-tag.equipment {
+        border-color: #52c41a;
+        color: #52c41a;
+    }
+    
+    .exercise-instructions {
+        margin-top: 8px;
+        padding: 8px;
+        background: white;
+        border-radius: 6px;
+    }
+    
+    .exercise-instructions ol {
+        margin: 0;
+        padding-left: 18px;
+    }
+    
+    .exercise-instructions li {
+        font-size: 10px;
+        line-height: 1.4;
+        margin-bottom: 4px;
+        color: #333;
+    }
+    
+    .target-muscles {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+        margin-top: 6px;
+    }
+    
+    .muscle-badge {
+        background: #e6f2ff;
+        color: #667eea;
+        font-size: 9px;
+        padding: 2px 6px;
+        border-radius: 8px;
+        font-weight: 500;
+    }
+    
+    .day-calories {
+        font-size: 10px;
+        color: #fa8c16;
+        background: #fff7e6;
+        padding: 3px 6px;
+        border-radius: 12px;
+        margin-left: 6px;
+    }
+    
+    .warning-banner {
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+        padding: 12px;
+        border-radius: 8px;
+        margin-bottom: 15px;
+        font-size: 11px;
+        line-height: 1.4;
+    }
+    
+    .warning-banner.warning-safety_override {
+        background: #fff3cd;
+        border-left: 4px solid #ff9800;
+    }
+    
+    .warning-banner.warning-suboptimal_frequency {
+        background: #e3f2fd;
+        border-left: 4px solid #2196f3;
+    }
+    
+    .warning-banner.warning-active_recovery_needed {
+        background: #f1f8e9;
+        border-left: 4px solid #8bc34a;
+    }
+    
+    .warning-icon {
+        font-size: 18px;
+        flex-shrink: 0;
+    }
+    
+    .warning-content {
+        flex: 1;
+    }
+    
+    .warning-text {
+        margin: 0 0 8px 0;
+        color: #333;
+    }
+    
+    .warning-link {
+        color: #667eea;
+        text-decoration: none;
+        font-weight: 600;
+        font-size: 11px;
+    }
+    
+    .warning-link:hover {
+        text-decoration: underline;
+    }
+    
+    .info-box {
+        background: #f8f9ff;
+        border-radius: 8px;
+        padding: 12px;
+        margin-top: 12px;
+        margin-bottom: 12px;
+        border-left: 4px solid #667eea;
+    }
+    
+    .workout-day.recovery {
+        border-left-color: #8bc34a;
+        background: #f1f8e9;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="phone-frame">
+    <div class="plan-header">
+        <div class="app-logo">💪</div>
+        <div class="app-name">Your Workout Plan</div>
+        <div class="app-tagline">
+            {% if workout_plan.week_of %}
+                Week of {{ workout_plan.week_of }}
+            {% elif workout_plan.week %}
+                {{ workout_plan.week }}
+            {% endif %}
+            
+            {% if workout_plan.fitness_level %}
+                • {{ workout_plan.fitness_level|title }} Level
+            {% endif %}
+        </div>
+    </div>
+    
+    <div class="scrollable-content">
+        <!-- Warning Banner -->
+        {% if workout_plan and workout_plan.warning_message %}
+        <div class="warning-banner warning-{{ workout_plan.warning_flag }}">
+            <div class="warning-icon">
+                {% if workout_plan.warning_flag == 'safety_override' %}⚠️
+                {% elif workout_plan.warning_flag == 'suboptimal_frequency' %}💡
+                {% elif workout_plan.warning_flag == 'active_recovery_needed' %}🌱
+                {% endif %}
+            </div>
+            <div class="warning-content">
+                <p class="warning-text">{{ workout_plan.warning_message }}</p>
+                {% if workout_plan.warning_flag == 'suboptimal_frequency' %}
+                <a href="{{ url_for('workout_schedule') }}" class="warning-link">Update Workout Schedule →</a>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+        
+        {% if workout_plan %}
+            <!-- Workout Statistics -->
+            {% if workout_plan.total_weekly_calories or workout_plan.workout_days_per_week %}
+                <div class="workout-stats">
+                    {% if workout_plan.workout_days_per_week %}
+                        <div class="stat-item">
+                            <span class="stat-value">{{ workout_plan.workout_days_per_week }}</span>
+                            <span class="stat-label">Workouts/Week</span>
+                        </div>
+                    {% endif %}
+                    
+                    {% if workout_plan.total_weekly_calories %}
+                        <div class="stat-item">
+                            <span class="stat-value">{{ workout_plan.total_weekly_calories|int }}</span>
+                            <span class="stat-label">Weekly Calories</span>
+                        </div>
+                    {% endif %}
+                    
+                    {% if workout_plan.days %}
+                        {% set workout_days = workout_plan.days|selectattr('exercises', 'defined')|list %}
+                        {% if workout_days %}
+                            {% set avg_duration = (workout_days|sum(attribute='duration_minutes', start=0) / workout_days|length)|round(0) %}
+                            <div class="stat-item">
+                                <span class="stat-value">{{ avg_duration|int }}</span>
+                                <span class="stat-label">Avg Minutes</span>
+                            </div>
+                        {% endif %}
+                    {% endif %}
+                </div>
+            {% endif %}
+            
+            <!-- Workout Days -->
+            {% for day in workout_plan.days %}
+                {% if day.exercises %}
+                    <!-- Workout Day -->
+                    <div class="workout-day" data-day="{{ day.day }}">
+                        <div class="workout-day-header">
+                            <div>
+                                <div class="workout-day-title">
+                                    {{ day.day }} - {{ day.focus or day.title }}
+                                </div>
+                                {% if day.target_muscles %}
+                                    <div class="target-muscles">
+                                        {% for muscle in day.target_muscles[:3] %}
+                                            <span class="muscle-badge">{{ muscle }}</span>
+                                        {% endfor %}
+                                        {% if day.target_muscles|length > 3 %}
+                                            <span class="muscle-badge">+{{ day.target_muscles|length - 3 }}</span>
+                                        {% endif %}
+                                    </div>
+                                {% endif %}
+                            </div>
+                            <div>
+                                {% if day.duration_minutes %}
+                                    <div class="workout-day-duration">{{ day.duration_minutes|round(0)|int }} min</div>
+                                {% elif day.duration %}
+                                    <div class="workout-day-duration">{{ day.duration }}</div>
+                                {% endif %}
+                                {% if day.estimated_calories %}
+                                    <div class="day-calories">{{ day.estimated_calories|round(0)|int }} cal</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        
+                        <!-- Exercises List -->
+                        {% for exercise in day.exercises %}
+                            <div class="exercise-item" data-exercise-id="{{ exercise.id or exercise.name|replace(' ', '_') }}">
+                                <div style="flex: 1;">
+                                    <div class="exercise-name">
+                                        {% if exercise.order %}{{ exercise.order }}. {% endif %}
+                                        {{ exercise.name }}
+                                    </div>
+                                    
+                                    <!-- Exercise Details Toggle -->
+                                    {% if exercise.instructions or exercise.primary_muscles or exercise.equipment %}
+                                        <button class="exercise-details-toggle" onclick="toggleExerciseDetails(this)">
+                                            Show details ▼
+                                        </button>
+                                    {% endif %}
+                                </div>
+                                
+                                <div style="text-align: right;">
+                                    <div class="exercise-details">
+                                        {% if exercise.sets and exercise.reps_range %}
+                                            {{ exercise.sets }} × {{ exercise.reps_range }}
+                                        {% elif exercise.sets and exercise.reps %}
+                                            {{ exercise.sets }} × {{ exercise.reps }}
+                                        {% elif exercise.sets %}
+                                            {{ exercise.sets }}
+                                        {% endif %}
+                                    </div>
+                                    {% if exercise.rest_seconds %}
+                                        <div style="font-size: 9px; color: #999; margin-top: 2px;">
+                                            Rest: {{ exercise.rest_seconds }}s
+                                        </div>
+                                    {% endif %}
+                                </div>
+                                
+                                <!-- Expandable Exercise Details -->
+                                {% if exercise.instructions or exercise.primary_muscles or exercise.equipment %}
+                                    <div class="exercise-expanded">
+                                        <div class="exercise-meta">
+                                            {% if exercise.estimated_calories %}
+                                                <span class="meta-tag">🔥 {{ exercise.estimated_calories|round(0)|int }} cal</span>
+                                            {% endif %}
+                                            {% if exercise.estimated_time_min %}
+                                                <span class="meta-tag">⏱️ {{ exercise.estimated_time_min|round(1) }} min</span>
+                                            {% endif %}
+                                            {% if exercise.primary_muscles %}
+                                                <span class="meta-tag muscles">
+                                                    💪 {{ exercise.primary_muscles|join(', ')|truncate(20) }}
+                                                </span>
+                                            {% endif %}
+                                            {% if exercise.equipment %}
+                                                <span class="meta-tag equipment">
+                                                    🏋️ {{ exercise.equipment|replace('_', ' ')|title }}
+                                                </span>
+                                            {% endif %}
+                                        </div>
+                                        
+                                        {% if exercise.instructions %}
+                                            <div class="exercise-instructions">
+                                                <strong style="font-size: 10px; color: #333;">How to perform:</strong>
+                                                <ol>
+                                                    {% for instruction in exercise.instructions %}
+                                                        <li>{{ instruction }}</li>
+                                                    {% endfor %}
+                                                </ol>
+                                            </div>
+                                        {% endif %}
+                                    </div>
+                                {% endif %}
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <!-- Rest or Recovery Day -->
+                    <div class="workout-day {% if day.type == 'recovery' %}recovery{% else %}rest{% endif %}" data-day="{{ day.day }}">
+                        <div class="workout-day-header">
+                            <div class="workout-day-title">
+                                {{ day.day }} - {{ day.focus or day.title or 'Rest Day' }}
+                            </div>
+                            <div class="workout-day-duration">
+                                {% if day.type == 'recovery' and day.duration_minutes %}
+                                    {{ day.duration_minutes }} min
+                                {% elif day.duration_minutes == 0 or day.duration == '—' %}
+                                    —
+                                {% elif day.duration %}
+                                    {{ day.duration }}
+                                {% else %}
+                                    Rest
+                                {% endif %}
+                            </div>
+                        </div>
+                        <p style="font-size: 12px; color: #666; margin: 0;">
+                            {% if day.type == 'recovery' %}🌱 {% endif %}
+                            {{ day.description or 'Recovery day. Light walking or gentle stretching recommended.' }}
+                        </p>
+                    </div>
+                {% endif %}
+            {% endfor %}
+            
+            <!-- Programming Guidelines -->
+            {% if workout_plan.programming_notes %}
+            <div class="info-box">
+                <h4 style="font-size: 12px; font-weight: 600; margin-bottom: 8px; color: #667eea;">
+                    💪 Training Guidelines
+                </h4>
+                <div style="font-size: 11px; color: #666; line-height: 1.5;">
+                    <p style="margin: 4px 0;"><strong>Reps:</strong> {{ workout_plan.programming_notes.rep_range }} per set</p>
+                    <p style="margin: 4px 0;"><strong>Rest:</strong> {{ workout_plan.programming_notes.rest_seconds }} seconds between sets</p>
+                    <p style="margin: 4px 0;"><strong>Weight:</strong> {{ workout_plan.programming_notes.load_percentage }} of your 1-rep max</p>
+                </div>
+            </div>
+            {% endif %}
+            
+            <div class="alert-box">
+                <p class="alert-text">💡 All exercises personalized for your profile. Stop if you feel pain.</p>
+            </div>
+        {% else %}
+            <div class="empty-state">
+                <p>No workout plan available. Please complete your profile first.</p>
+            </div>
+        {% endif %}
+    </div>
+    
+    <div class="navigation">
+        <a href="{{ url_for('dashboard') }}">
+            <button class="btn-secondary">← Back to Dashboard</button>
+        </a>
+        {% if workout_plan %}
+            <button class="btn-primary" id="regenerate-workout-btn">Regenerate Plan</button>
+        {% else %}
+            <a href="{{ url_for('basic_info') }}">
+                <button class="btn-primary">Complete Profile</button>
+            </a>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+function toggleExerciseDetails(button) {
+    const exerciseItem = button.closest('.exercise-item');
+    const expandedDiv = exerciseItem.querySelector('.exercise-expanded');
+    
+    if (expandedDiv.classList.contains('show')) {
+        expandedDiv.classList.remove('show');
+        button.textContent = 'Show details ▼';
+    } else {
+        expandedDiv.classList.add('show');
+        button.textContent = 'Hide details ▲';
+    }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    const regenerateBtn = document.getElementById('regenerate-workout-btn');
+    if (regenerateBtn) {
+        regenerateBtn.addEventListener('click', function() {
+            if (confirm('Generate a new workout plan? This will replace your current plan.')) {
+                regenerateBtn.disabled = true;
+                regenerateBtn.textContent = 'Generating...';
+                
+                fetch('/regenerate-workout', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        window.location.reload();
+                    } else {
+                        alert('Error: ' + (data.error || 'Failed to regenerate plan'));
+                        regenerateBtn.disabled = false;
+                        regenerateBtn.textContent = 'Regenerate Plan';
+                    }
+                })
+                .catch(error => {
+                    alert('Error regenerating plan. Please try again.');
+                    regenerateBtn.disabled = false;
+                    regenerateBtn.textContent = 'Regenerate Plan';
+                });
+            }
+        });
+    }
+});
+</script>
+{% endblock %}

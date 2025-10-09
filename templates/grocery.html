@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+
+{% block title %}FitPlan - Shopping List{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="phone-frame">
+    <div class="plan-header">
+        <div class="app-logo">🛒</div>
+        <div class="app-name">Shopping List</div>
+        <div class="app-tagline">{{ grocery_list.week }} • Organized by aisle</div>
+    </div>
+    
+    <div class="scrollable-content">
+        {% if grocery_list %}
+            {% for section in grocery_list.sections %}
+                <div class="grocery-section">
+                    <div class="grocery-section-title">
+                        <span class="grocery-section-icon">{{ section.title.split(' ')[0] }}</span>
+                        {{ section.title.split(' ', 1)[1] }}
+                    </div>
+                    {% for item in section['items'] %}
+                        <div class="grocery-item" onclick="toggleGroceryItem(this)">
+                            <div class="grocery-item-name">{{ item['name'] }}</div>
+                            <div class="grocery-item-quantity">{{ item['quantity'] }}</div>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% endfor %}
+            
+            <div class="alert-box" style="margin-top: 15px;">
+                <p class="alert-text">💡 Tap items to check them off as you shop</p>
+            </div>
+        {% else %}
+            <div class="empty-state">
+                <p>No grocery list available. Please complete your profile first.</p>
+            </div>
+        {% endif %}
+    </div>
+    
+    <div class="navigation">
+        <a href="{{ url_for('dashboard') }}">
+            <button class="btn-secondary">← Back to Dashboard</button>
+        </a>
+        {% if grocery_list %}
+            <button class="btn-primary" onclick="alert('Export list feature coming soon!')">Export List</button>
+        {% else %}
+            <a href="{{ url_for('basic_info') }}">
+                <button class="btn-primary">Complete Profile</button>
+            </a>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+function toggleGroceryItem(item) {
+    item.classList.toggle('checked');
+}
+</script>
+{% endblock %}

@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+
+{% block title %}FitPlan - Workout Schedule{% endblock %}
+
+{% block content %}
+<div class="phone-frame">
+    <div class="progress-bar">
+        <div class="progress-fill" style="width: 57%"></div>
+    </div>
+    <div class="step-indicator">Step 4 of 7 • Workout Schedule</div>
+    
+    <div class="scrollable-content">
+        <h3 style="font-size: 18px; margin-bottom: 10px; text-align: center;">How many days per week can you commit?</h3>
+        <p style="font-size: 14px; color: #666; text-align: center; margin-bottom: 25px;">We'll design your workout plan around your availability</p>
+        
+        <form method="POST" action="{{ url_for('save_workout_schedule') }}" id="workoutScheduleForm" autocomplete="off">
+            <div class="goal-options">
+                <label class="goal-option" for="casual">
+                    <input type="radio" name="workout_schedule" value="1" id="casual" required>
+                    <div class="goal-icon">🌱</div>
+                    <div class="goal-text">
+                        <div class="goal-title">1-2 days</div>
+                        <div class="goal-desc">Casual - Building healthy habits</div>
+                    </div>
+                </label>
+                
+                <label class="goal-option" for="engaged">
+                    <input type="radio" name="workout_schedule" value="3" id="engaged">
+                    <div class="goal-icon">🔥</div>
+                    <div class="goal-text">
+                        <div class="goal-title">3-4 days</div>
+                        <div class="goal-desc">Engaged - Balanced fitness routine</div>
+                    </div>
+                </label>
+                
+                <label class="goal-option" for="committed">
+                    <input type="radio" name="workout_schedule" value="5" id="committed">
+                    <div class="goal-icon">💪</div>
+                    <div class="goal-text">
+                        <div class="goal-title">5-6 days</div>
+                        <div class="goal-desc">Committed - Serious about results</div>
+                    </div>
+                </label>
+                
+                <label class="goal-option" for="obsessed">
+                    <input type="radio" name="workout_schedule" value="7" id="obsessed">
+                    <div class="goal-icon">⚡</div>
+                    <div class="goal-text">
+                        <div class="goal-title">Every day</div>
+                        <div class="goal-desc">Obsessed - All-in dedication</div>
+                    </div>
+                </label>
+            </div>
+        </form>
+    </div>
+    
+    <div class="navigation">
+        <a href="{{ url_for('fitness_goals') }}">
+            <button type="button" class="btn-back">Back</button>
+        </a>
+        <button type="submit" form="workoutScheduleForm" class="btn-next">Next</button>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/forms.js') }}"></script>
+{% endblock %}

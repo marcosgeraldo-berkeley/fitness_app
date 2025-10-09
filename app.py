@@ -8,6 +8,10 @@ from datetime import datetime, timedelta
 app = Flask(__name__)
 app.secret_key = 'your-secret-key-here'  # Change this in production
 
+# ====================INITIALIZE WORKOUT GENERATOR ====================
+from workout_generator import WorkoutGenerator
+workout_generator = WorkoutGenerator(fitplan_db='fitplan.db', exercise_db='exercises.db')
+
 # ==================== METABOLIC CALCULATION FUNCTIONS ====================
 
 def calculate_bmr(weight_kg, height_cm, age, gender):
@@ -174,6 +178,7 @@ def init_db():
             height TEXT,
             activity_level TEXT,
             fitness_goals TEXT,
+            workout_schedule INTEGER,
             dietary_restrictions TEXT,
             physical_limitations TEXT,
             available_equipment TEXT,
@@ -386,6 +391,27 @@ def save_fitness_goals():
     # Recalculate after fitness goals update
     recalculate_nutrition_targets(session['user_id'])
     
+    return redirect(url_for('workout_schedule'))
+
+@app.route('/workout-schedule')
+def workout_schedule():
+    if 'user_id' not in session:
+        return redirect(url_for('index'))
+    return render_template('workout_schedule.html')
+
+@app.route('/save-workout-schedule', methods=['POST'])
+def save_workout_schedule():
+    if 'user_id' not in session:
+        return redirect(url_for('index'))
+    
+    schedule = request.form['workout_schedule']
+    
+    conn = get_db_connection()
+    conn.execute('UPDATE users SET workout_schedule = ? WHERE id = ?',
+                (schedule, session['user_id']))
+    conn.commit()
+    conn.close()
+    
     return redirect(url_for('dietary_restrictions'))
 
 @app.route('/dietary-restrictions')
@@ -468,190 +494,152 @@ def profile_summary():
 
 @app.route('/create-plan', methods=['POST'])
 def create_plan():
+    """Modified version that uses the workout generator"""
     if 'user_id' not in session:
         return redirect(url_for('index'))
     
     user_id = session['user_id']
     week_date = datetime.now().strftime('%Y-%m-%d')
     
-    # Get user data for calculations
-    conn = get_db_connection()
-    user = conn.execute('SELECT * FROM users WHERE id = ?', (user_id,)).fetchone()
-    weight_kg = float(user['weight']) * 0.453592  # Convert lbs to kg
-    
-    # Sample workout plan data WITH MET VALUES
-    workout_data = {
-        "week": "March 18-24",
-        "days": [
-            {
-                "day": "Monday",
-                "title": "Upper Body Push",
-                "duration": "45 min",
-                "duration_minutes": 45,
-                "met_value": 5.0,
-                "exercises": [
-                    {"name": "Dumbbell Chest Press", "sets": "3 × 12"},
-                    {"name": "Dumbbell Shoulder Press", "sets": "3 × 10"},
-                    {"name": "Dumbbell Tricep Extensions", "sets": "3 × 12"},
-                    {"name": "Lateral Raises", "sets": "3 × 15"}
-                ]
-            },
-            {
-                "day": "Tuesday",
-                "title": "Rest Day",
-                "duration": "—",
-                "duration_minutes": 0,
-                "met_value": 0,
-                "description": "Recovery day. Light walking or gentle stretching recommended."
-            },
-            {
-                "day": "Wednesday", 
-                "title": "Upper Body Pull",
-                "duration": "40 min",
-                "duration_minutes": 40,
-                "met_value": 5.0,
-                "exercises": [
-                    {"name": "Dumbbell Bent-Over Rows", "sets": "3 × 12"},
-                    {"name": "Single-Arm Rows", "sets": "3 × 10 each"},
-                    {"name": "Dumbbell Bicep Curls", "sets": "3 × 15"},
-                    {"name": "Reverse Flyes", "sets": "3 × 12"}
-                ]
-            },
-            {
-                "day": "Thursday",
-                "title": "Rest Day", 
-                "duration": "—",
-                "duration_minutes": 0,
-                "met_value": 0,
-                "description": "Active recovery. 20-30 minutes of walking recommended."
-            },
-            {
-                "day": "Friday",
-                "title": "Lower Body",
-                "duration": "35 min",
-                "duration_minutes": 35,
-                "met_value": 6.0,
-                "exercises": [
-                    {"name": "Bodyweight Squats", "sets": "3 × 15"},
-                    {"name": "Dumbbell Lunges", "sets": "3 × 10 each"},
-                    {"name": "Seated Calf Raises", "sets": "3 × 20"},
-                    {"name": "Glute Bridges", "sets": "3 × 15"}
-                ]
-            },
-            {
-                "day": "Saturday",
-                "title": "Core & Cardio",
-                "duration": "30 min", 
-                "duration_minutes": 30,
-                "met_value": 7.0,
-                "exercises": [
-                    {"name": "Modified Planks", "sets": "3 × 30s"},
-                    {"name": "Seated Russian Twists", "sets": "3 × 20"},
-                    {"name": "Dead Bugs", "sets": "3 × 10 each"}
-                ]
-            },
-            {
-                "day": "Sunday",
-                "title": "Rest Day",
-                "duration": "—",
-                "duration_minutes": 0,
-                "met_value": 0,
-                "description": "Complete rest or light yoga/stretching."
-            }
-        ]
-    }
-    
-    # Calculate weekly exercise calories
-    weekly_exercise_cal = calculate_weekly_exercise_calories(workout_data, weight_kg)
-    workout_data['weekly_calories_burned'] = weekly_exercise_cal
-    
-    # Sample meal plan data
-    meal_data = {
-        "week": "March 18-24",
-        "daily_calories": user['caloric_target'] if user['caloric_target'] else 1650,
-        "days": {
-            "Monday": {
-                "date": "March 18",
-                "meals": [
-                    {
-                        "title": "🌅 Breakfast",
-                        "calories": 420,
-                        "description": "Greek Yogurt Parfait with gluten-free granola and blueberries",
-                        "macros": {"protein": "25g", "carbs": "45g", "fat": "18g"}
-                    },
-                    {
-                        "title": "🥗 Lunch", 
-                        "calories": 480,
-                        "description": "Grilled Chicken Quinoa Bowl with roasted vegetables",
-                        "macros": {"protein": "32g", "carbs": "42g", "fat": "16g"}
-                    },
-                    {
-                        "title": "🍽️ Dinner",
-                        "calories": 520,
-                        "description": "Baked Salmon with sweet potato and steamed broccoli", 
-                        "macros": {"protein": "35g", "carbs": "38g", "fat": "22g"}
-                    },
-                    {
-                        "title": "🥜 Snacks",
-                        "calories": 230,
-                        "description": "Apple with almond butter, herbal tea",
-                        "macros": {"protein": "8g", "carbs": "22g", "fat": "14g"}
-                    }
-                ]
+    try:
+        # GENERATE REAL WORKOUT PLAN
+        workout_data = workout_generator.generate_weekly_plan(user_id)
+        
+        # Get user data for meal calculations
+        conn = get_db_connection()
+        user = conn.execute('SELECT * FROM users WHERE id = ?', (user_id,)).fetchone()
+        
+        # Sample meal plan data (you'll replace this with your meal generator later)
+        meal_data = {
+            "week": datetime.now().strftime("%B %d-%d"),
+            "daily_calories": user['caloric_target'] if user['caloric_target'] else 1650,
+            "days": {
+                "Monday": {
+                    "date": datetime.now().strftime("%B %d"),
+                    "meals": [
+                        {
+                            "title": "🌅 Breakfast",
+                            "calories": 420,
+                            "description": "Greek Yogurt Parfait with gluten-free granola and blueberries",
+                            "macros": {"protein": "25g", "carbs": "45g", "fat": "18g"}
+                        },
+                        {
+                            "title": "🥗 Lunch", 
+                            "calories": 480,
+                            "description": "Grilled Chicken Quinoa Bowl with roasted vegetables",
+                            "macros": {"protein": "32g", "carbs": "42g", "fat": "16g"}
+                        },
+                        {
+                            "title": "🍽️ Dinner",
+                            "calories": 520,
+                            "description": "Baked Salmon with sweet potato and steamed broccoli", 
+                            "macros": {"protein": "35g", "carbs": "38g", "fat": "22g"}
+                        },
+                        {
+                            "title": "🥜 Snacks",
+                            "calories": 230,
+                            "description": "Apple with almond butter, herbal tea",
+                            "macros": {"protein": "8g", "carbs": "22g", "fat": "14g"}
+                        }
+                    ]
+                }
             }
         }
-    }
-    
-    # Sample grocery list
-    grocery_data = {
-        "week": "March 18-24",
-        "sections": [
-            {
-                "title": "🥬 Produce",
-                "items": [
-                    {"name": "Blueberries", "quantity": "2 cups"},
-                    {"name": "Broccoli crowns", "quantity": "2 heads"},
-                    {"name": "Sweet potatoes", "quantity": "3 medium"},
-                    {"name": "Apples", "quantity": "4 large"}
-                ]
-            },
-            {
-                "title": "🥩 Protein", 
-                "items": [
-                    {"name": "Chicken breast", "quantity": "2 lbs"},
-                    {"name": "Salmon fillets", "quantity": "4 pieces"},
-                    {"name": "Greek yogurt (plain)", "quantity": "32 oz"}
-                ]
-            },
-            {
-                "title": "🌾 Pantry",
-                "items": [
-                    {"name": "Quinoa", "quantity": "1 lb bag"},
-                    {"name": "GF granola", "quantity": "1 box"},
-                    {"name": "Almond butter", "quantity": "1 jar"},
-                    {"name": "Tahini", "quantity": "1 container"}
-                ]
-            }
-        ],
-    }
-    
-    # Save workout plan
-    conn.execute('INSERT INTO workout_plans (user_id, week_date, plan_data) VALUES (?, ?, ?)',
-                (user_id, week_date, json.dumps(workout_data)))
-    
-    # Save meal plan  
-    conn.execute('INSERT INTO meal_plans (user_id, week_date, plan_data) VALUES (?, ?, ?)',
-                (user_id, week_date, json.dumps(meal_data)))
-    
-    # Store grocery data
-    conn.execute('INSERT INTO grocery_lists (user_id, week_date, grocery_data) VALUES (?, ?, ?)',
-                (user_id, week_date, json.dumps(grocery_data)))
-    
-    conn.commit()
-    conn.close()
-    
-    return redirect(url_for('dashboard'))
+        
+        # Sample grocery list
+        grocery_data = {
+            "week": datetime.now().strftime("%B %d-%d"),
+            "sections": [
+                {
+                    "title": "🥬 Produce",
+                    "items": [
+                        {"name": "Blueberries", "quantity": "2 cups"},
+                        {"name": "Broccoli crowns", "quantity": "2 heads"},
+                        {"name": "Sweet potatoes", "quantity": "3 medium"},
+                        {"name": "Apples", "quantity": "4 large"}
+                    ]
+                },
+                {
+                    "title": "🥩 Protein", 
+                    "items": [
+                        {"name": "Chicken breast", "quantity": "2 lbs"},
+                        {"name": "Salmon fillets", "quantity": "4 pieces"},
+                        {"name": "Greek yogurt (plain)", "quantity": "32 oz"}
+                    ]
+                },
+                {
+                    "title": "🌾 Pantry",
+                    "items": [
+                        {"name": "Quinoa", "quantity": "1 lb bag"},
+                        {"name": "GF granola", "quantity": "1 box"},
+                        {"name": "Almond butter", "quantity": "1 jar"}
+                    ]
+                }
+            ],
+        }
+        
+        # Save workout plan
+        conn.execute('INSERT INTO workout_plans (user_id, week_date, plan_data) VALUES (?, ?, ?)',
+                    (user_id, week_date, json.dumps(workout_data)))
+        
+        # Save meal plan  
+        conn.execute('INSERT INTO meal_plans (user_id, week_date, plan_data) VALUES (?, ?, ?)',
+                    (user_id, week_date, json.dumps(meal_data)))
+        
+        # Store grocery data
+        conn.execute('INSERT INTO grocery_lists (user_id, week_date, grocery_data) VALUES (?, ?, ?)',
+                    (user_id, week_date, json.dumps(grocery_data)))
+        
+        conn.commit()
+        conn.close()
+        
+        flash('Your personalized workout plan has been created!', 'success')
+        return redirect(url_for('dashboard'))
+        
+    except Exception as e:
+        print(f"Error creating plan: {e}")
+        import traceback
+        traceback.print_exc()
+        flash('Error creating plan. Please try again.', 'error')
+        return redirect(url_for('profile_summary'))
 
+@app.route('/regenerate-workout', methods=['POST'])
+def regenerate_workout():
+    """Regenerate workout plan for current user"""
+    if 'user_id' not in session:
+        return jsonify({"error": "Not authenticated"}), 401
+    
+    try:
+        user_id = session['user_id']
+        workout_plan = workout_generator.generate_weekly_plan(user_id)
+        
+        # Update database
+        week_date = workout_plan['week_of']
+        conn = get_db_connection()
+        
+        conn.execute(
+            'DELETE FROM workout_plans WHERE user_id = ? AND week_date = ?',
+            (user_id, week_date)
+        )
+        
+        conn.execute(
+            'INSERT INTO workout_plans (user_id, week_date, plan_data) VALUES (?, ?, ?)',
+            (user_id, week_date, json.dumps(workout_plan))
+        )
+        
+        conn.commit()
+        conn.close()
+        
+        return jsonify({
+            "success": True,
+            "message": "Workout plan regenerated",
+            "redirect": url_for('dashboard')
+        }), 200
+        
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    
+    
 @app.route('/dashboard')
 def dashboard():
     if 'user_id' not in session:
@@ -722,10 +710,139 @@ def dashboard():
                          nutrition_targets=nutrition_targets,
                          user_name=session.get('user_name'))
 
+# NEW: Add workout page route
+@app.route('/workout')
+def workout_page():
+    if 'user_id' not in session:
+        return redirect(url_for('index'))
+    
+    conn = get_db_connection()
+    
+    # Get latest workout plan
+    workout_plan = conn.execute('SELECT * FROM workout_plans WHERE user_id = ? ORDER BY created_at DESC LIMIT 1',
+                               (session['user_id'],)).fetchone()
+    conn.close()
+    
+    workout_data = json.loads(workout_plan['plan_data']) if workout_plan else None
+    
+    return render_template('workout.html', 
+                         workout_plan=workout_data,
+                         user_name=session.get('user_name'))
+
+
+# NEW: Add meals page route
+@app.route('/meals')
+def meals_page():
+    if 'user_id' not in session:
+        return redirect(url_for('index'))
+    
+    conn = get_db_connection()
+    
+    # Get latest meal plan
+    meal_plan = conn.execute('SELECT * FROM meal_plans WHERE user_id = ? ORDER BY created_at DESC LIMIT 1', 
+                            (session['user_id'],)).fetchone()
+    conn.close()
+    
+    meal_data = json.loads(meal_plan['plan_data']) if meal_plan else None
+    
+    # Extract first day from meal_data
+    first_day = None
+    if meal_data:
+        if isinstance(meal_data, list) and len(meal_data) > 0:
+            first_day = meal_data[0]
+        elif isinstance(meal_data, dict):
+            if 'days' in meal_data and meal_data['days']:
+                first_day_key = next(iter(meal_data['days']))
+                first_day = meal_data['days'][first_day_key]
+                first_day['day_name'] = first_day_key
+            elif 'meal_plan' in meal_data and meal_data['meal_plan']:
+                if isinstance(meal_data['meal_plan'], list):
+                    first_day = meal_data['meal_plan'][0]
+                else:
+                    first_day_key = next(iter(meal_data['meal_plan']))
+                    first_day = meal_data['meal_plan'][first_day_key]
+            elif 'day_1' in meal_data:
+                first_day = meal_data['day_1']
+            else:
+                first_day = meal_data
+    
+    return render_template('meals.html', 
+                         meal_plan=meal_data,
+                         first_day=first_day,
+                         user_name=session.get('user_name'))
+
+
+# NEW: Add grocery page route
+@app.route('/grocery')
+def grocery_page():
+    if 'user_id' not in session:
+        return redirect(url_for('index'))
+    
+    conn = get_db_connection()
+    
+    # Get latest grocery list
+    grocery_list = conn.execute('SELECT * FROM grocery_lists WHERE user_id = ? ORDER BY created_at DESC LIMIT 1', 
+                            (session['user_id'],)).fetchone()
+    conn.close()
+    
+    grocery_data = json.loads(grocery_list['grocery_data']) if grocery_list else None
+    
+    return render_template('grocery.html', 
+                         grocery_list=grocery_data,
+                         user_name=session.get('user_name'))
+
 # Placeholder API endpoints for plan generation
 @app.route('/api/generate-workout-plan', methods=['POST'])
 def generate_workout_plan():
-    return jsonify({"message": "Workout plan generation - Work in progress"})
+    """Generate personalized workout plan using rule-based algorithm"""
+    if 'user_id' not in session:
+        return jsonify({"error": "Not authenticated"}), 401
+    
+    try:
+        user_id = session['user_id']
+        
+        # Generate workout plan
+        workout_plan = workout_generator.generate_weekly_plan(user_id)
+        
+        # Save to database
+        week_date = workout_plan['week_of']
+        conn = get_db_connection()
+        
+        # Check if plan already exists for this week
+        existing = conn.execute(
+            'SELECT id FROM workout_plans WHERE user_id = ? AND week_date = ?',
+            (user_id, week_date)
+        ).fetchone()
+        
+        if existing:
+            # Update existing plan
+            conn.execute(
+                'UPDATE workout_plans SET plan_data = ?, created_at = CURRENT_TIMESTAMP WHERE id = ?',
+                (json.dumps(workout_plan), existing['id'])
+            )
+        else:
+            # Insert new plan
+            conn.execute(
+                'INSERT INTO workout_plans (user_id, week_date, plan_data) VALUES (?, ?, ?)',
+                (user_id, week_date, json.dumps(workout_plan))
+            )
+        
+        conn.commit()
+        conn.close()
+        
+        return jsonify({
+            "success": True,
+            "message": "Workout plan generated successfully",
+            "plan": workout_plan
+        }), 200
+        
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        print(f"Error generating workout plan: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": "Failed to generate workout plan"}), 500
 
 @app.route('/api/generate-meal-plan', methods=['POST']) 
 def generate_meal_plan():

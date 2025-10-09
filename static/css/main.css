@@ -462,3 +462,71 @@ body {
         padding: 0;
     }
 }
+
+/* Warning Banner Styles */
+.warning-banner {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 12px;
+    border-radius: 8px;
+    margin-bottom: 15px;
+    font-size: 11px;
+    line-height: 1.4;
+}
+
+.warning-banner.warning-safety_override {
+    background: #fff3cd;
+    border-left: 4px solid #ff9800;
+}
+
+.warning-banner.warning-suboptimal_frequency {
+    background: #e3f2fd;
+    border-left: 4px solid #2196f3;
+}
+
+.warning-banner.warning-active_recovery_needed {
+    background: #f1f8e9;
+    border-left: 4px solid #8bc34a;
+}
+
+.warning-icon {
+    font-size: 18px;
+    flex-shrink: 0;
+}
+
+.warning-content {
+    flex: 1;
+}
+
+.warning-text {
+    margin: 0 0 8px 0;
+    color: #333;
+}
+
+.warning-link {
+    color: #667eea;
+    text-decoration: none;
+    font-weight: 600;
+    font-size: 11px;
+}
+
+.warning-link:hover {
+    text-decoration: underline;
+}
+
+/* Info Box Styles */
+.info-box {
+    background: #f8f9ff;
+    border-radius: 8px;
+    padding: 12px;
+    margin-top: 12px;
+    margin-bottom: 12px;
+    border-left: 4px solid #667eea;
+}
+
+/* Recovery Day Styles */
+.workout-day.recovery {
+    border-left-color: #8bc34a;
+    background: #f1f8e9;
+}
