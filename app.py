@@ -46,6 +46,13 @@ logging.basicConfig(
     handlers=[logging.StreamHandler(sys.stdout)]  # send to Docker logs
 )
 
+# Log the cwd for debugging
+logging.info(f"Current working directory: {os.getcwd()}")
+# Log the directory contents for debugging
+logging.info(f"Directory contents: {os.listdir('.')}")
+if os.path.exists('./templates'):
+    logging.info(f"Templates directory contents: {os.listdir('./templates')}")
+
 # ====================INITIALIZE WORKOUT GENERATOR ====================
 from workout_generator import WorkoutGenerator
 workout_generator = WorkoutGenerator(fitplan_db='fitplan.db', exercise_db='exercises.db')
@@ -313,6 +320,12 @@ def register():
     
     conn = get_db_connection()
     try:
+        # Check to make sure users table exists
+        exists = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='users';").fetchone()
+        if not exists:
+            init_db()
+            logging.info("Initialized database and created tables.")
+
         conn.execute('INSERT INTO users (name, email, password) VALUES (?, ?, ?)',
                     (name, email, hash_password(password)))
         conn.commit()
@@ -533,11 +546,15 @@ def profile_summary():
 @app.route('/create-plan', methods=['POST'])
 def create_plan():
     """Modified version that uses the workout generator"""
+    logging.info("Starting plan creation...")
+
     if 'user_id' not in session:
         return redirect(url_for('index'))
     
     user_id = session['user_id']
     week_date = datetime.now().strftime('%Y-%m-%d')
+
+    logging.info("Creating plan for user_id: {user_id}")
     
     try:
         # GENERATE REAL WORKOUT PLAN
@@ -554,7 +571,9 @@ def create_plan():
         dietary = json.loads(user['dietary_restrictions']) if user['dietary_restrictions'] else []
         logging.info(dietary)
 
-        meals = get_one_day_meal_plan(caloric_target, dietary)
+        logging.info(f"Generating meal plan for {caloric_target} calories with dietary restrictions: {dietary}")
+        data = get_one_day_meal_plan(caloric_target, dietary)
+        meals = data.get('meals', [])
         logging.info(meals)
         
         # Sample meal plan data (you'll replace this with your meal generator later)
@@ -621,7 +640,7 @@ def create_plan():
         return redirect(url_for('dashboard'))
         
     except Exception as e:
-        print(f"Error creating plan: {e}")
+        logging.error(f"Error creating plan: {e}")
         import traceback
         traceback.print_exc()
         flash('Error creating plan. Please try again.', 'error')

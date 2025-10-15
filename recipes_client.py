@@ -5,17 +5,24 @@ import logging
 
 logging.basicConfig(level=logging.INFO)
 
-RECIPE_API_BASE = os.getenv("RECIPE_API_BASE", "http://apig:8000")
+RECIPE_API_BASE = os.getenv("RECIPE_API_BASE", "http://api:8000")
 RECIPE_API_KEY = os.getenv("RECIPE_API_KEY")  # optional
 
 def _request(path: str, params: dict):
     url = f"{RECIPE_API_BASE.rstrip('/')}/{path.lstrip('/')}"
+    logging.info(f"Requesting URL: {url} with params: {params}")
     headers = {}
+    headers["accept"] = "application/json"
+    headers["Content-Type"] = "application/json"
     if RECIPE_API_KEY:
         headers["Authorization"] = f"Bearer {RECIPE_API_KEY}"
+
+    if params:
+        r = requests.post(url, json=params, headers=headers, timeout=10)
+    else:
+        r = requests.get(url, headers=headers, timeout=10)
     # r = requests.get(url, params=params, headers=headers, timeout=10)
     # POST request
-    r = requests.post(url, json=params, headers=headers, timeout=10)
     r.raise_for_status()
     return r.json()
 
@@ -46,57 +53,19 @@ def get_one_recipe(dense_query: str, meal_type: str, dietary: list = [], cal_min
     results = data.get("results")
     return results[0] if results else None
 
-def get_one_day_meal_plan(caloric_target: int, dietary: list = []):
+def get_one_day_meal_plan(caloric_target: float, dietary: list = []):
     """
     Fetch a one-day meal plan from the API based on optional dietary and macro parameters
     """
+    # get api status to make sure it is up and running
+    data = _request("/status", {})
+    logging.info(f"API status: {data}")
+
     # call API to get basic meals for one day, one meal at a time
-    # TODO: Maybe we can let the API handle all of this logic instead?
-    #       But for now, we'll do it here to keep control
-    #       Also, we can improve the prompts later
-    original_caloric_target = caloric_target
-
-    # meal calorie percentages
-    daily_meal_config = {
-        "breakfast": {"calorie_pct": 0.25, "query": "healthy breakfast","meal_tag":"breakfast"},
-        "lunch": {"calorie_pct": 0.30, "query": "easy lunch salad","meal_tag":"salad"},
-        "dinner": {"calorie_pct": 0.30, "query": "healthy dinner","meal_tag":"main"},
-        "snack": {"calorie_pct": 0.15, "query": "healthy snack","meal_tag":"snack"},
+    params = {
+        "caloric_target": caloric_target,
+        "dietary": dietary
     }
-
-    meals = []
-
-    calorie_tolerance = 0.025  # 2.5% tolerance
-
-    for k, v in daily_meal_config.items():
-
-        meal = get_one_recipe(
-            dense_query=v["query"],
-            meal_type=v["meal_tag"],
-            dietary=dietary,
-            cal_min=int(caloric_target * (v["calorie_pct"] - calorie_tolerance)),
-            cal_max=int(caloric_target * (v["calorie_pct"] + calorie_tolerance))
-        )
-        calorie_offset = caloric_target*v["calorie_pct"] - (meal['macros_per_serving']['cal'] if meal else 0)
-        caloric_target += calorie_offset  # Adjust target for remaining meals
-        meal_display = results_to_display(meal)
-        print(meal_display)
-        meals.append(meal_display)
-
-    print(f"Caloric target: {original_caloric_target}. Actual total: {sum(m['calories'] for m in meals if m)}")
-
-    return meals
-
-def results_to_display(recipe: dict):
-    if not recipe:
-        return None
-    return {
-        "title": recipe['title'],
-        "calories": int(recipe['macros_per_serving']['cal']),
-        "description": recipe['summary'],
-        "macros": {
-            "protein": f"{int(recipe['macros_per_serving']['protein_g']+0.5)}g", # Round to nearest gram
-            "carbs": f"{int(recipe['macros_per_serving']['carbs_g']+0.5)}g",
-            "fat": f"{int(recipe['macros_per_serving']['fat_g']+0.5)}g"
-        }
-    }
+    logging.info(f"Requesting meal plan with params: {params}")
+    data = _request("/meal-plan", params)
+    return data
