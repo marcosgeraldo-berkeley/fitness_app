@@ -17,8 +17,6 @@
                     <option value="">Select gender</option>
                     <option value="male">Male</option>
                     <option value="female">Female</option>
-                    <option value="non-binary">Non-binary</option>
-                    <option value="prefer-not-to-say">Prefer not to say</option>
                 </select>
             </div>
             
@@ -30,19 +28,22 @@
             <div class="input-row">
                 <div class="form-group">
                     <label class="form-label">Height</label>
-                    <input type="text" name="height" class="form-input" placeholder="5'8&quot;" required>
-                    <div class="unit-selector">
-                        <button type="button" class="unit-option active" data-unit="ft">ft/in</button>
-                        <button type="button" class="unit-option" data-unit="cm">cm</button>
+                    <div class="height-inputs">
+                        <input type="number" name="height_feet" class="form-input form-input-small" 
+                            placeholder="5" min="3" max="8" required>
+                        <span class="input-separator">ft</span>
+                        <input type="number" name="height_inches" class="form-input form-input-small" 
+                            placeholder="10" min="0" max="11" required>
+                        <span class="input-separator">in</span>
                     </div>
                 </div>
                 
                 <div class="form-group">
                     <label class="form-label">Weight</label>
-                    <input type="number" name="weight" class="form-input" placeholder="150" min="50" max="500" required>
-                    <div class="unit-selector">
-                        <button type="button" class="unit-option active" data-unit="lbs">lbs</button>
-                        <button type="button" class="unit-option" data-unit="kg">kg</button>
+                    <div class="weight-input">
+                        <input type="number" name="weight_lbs" class="form-input" 
+                            placeholder="150" min="50" max="500" required>
+                        <span class="input-unit">lbs</span>
                     </div>
                 </div>
             </div>

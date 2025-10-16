@@ -190,6 +190,97 @@
         border-left-color: #8bc34a;
         background: #f1f8e9;
     }
+    
+    /* NEW: Styles for modified exercises */
+    .exercise-item.has-modification {
+        background: #fff9e6;
+        border-left: 3px solid #ff9800;
+        padding-left: 12px;
+    }
+    
+    .modification-icon {
+        color: #ff9800;
+        font-size: 12px;
+        margin-left: 4px;
+    }
+    
+    .exercise-modifications {
+        margin-top: 10px;
+        padding: 10px;
+        background: #fff3cd;
+        border-radius: 6px;
+        border-left: 3px solid #ff9800;
+    }
+    
+    .modification-header {
+        font-weight: bold;
+        font-size: 11px;
+        color: #333;
+        margin-bottom: 8px;
+    }
+    
+    .modification-item {
+        margin-bottom: 8px;
+        padding-left: 8px;
+    }
+    
+    .modification-item:last-child {
+        margin-bottom: 0;
+    }
+    
+    .modification-category {
+        font-weight: 600;
+        font-size: 10px;
+        color: #ff9800;
+        text-transform: capitalize;
+        margin-bottom: 2px;
+    }
+    
+    .modification-text {
+        font-size: 10px;
+        color: #333;
+        line-height: 1.4;
+    }
+    
+    /* NEW: Day-level warnings */
+    .day-warnings {
+        margin-top: 12px;
+        padding: 10px;
+        background: #fff3cd;
+        border-radius: 8px;
+        border-left: 3px solid #ff9800;
+    }
+    
+    .day-warnings-header {
+        font-weight: bold;
+        font-size: 11px;
+        color: #333;
+        margin-bottom: 6px;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+    }
+    
+    .day-warning-item {
+        font-size: 10px;
+        color: #666;
+        line-height: 1.4;
+        margin-bottom: 6px;
+        padding-left: 12px;
+        position: relative;
+    }
+    
+    .day-warning-item:last-child {
+        margin-bottom: 0;
+    }
+    
+    .day-warning-item:before {
+        content: "•";
+        position: absolute;
+        left: 0;
+        color: #ff9800;
+        font-weight: bold;
+    }
 </style>
 {% endblock %}
 
@@ -296,15 +387,18 @@
                         
                         <!-- Exercises List -->
                         {% for exercise in day.exercises %}
-                            <div class="exercise-item" data-exercise-id="{{ exercise.id or exercise.name|replace(' ', '_') }}">
+                            <div class="exercise-item {% if exercise.modifications %}has-modification{% endif %}" data-exercise-id="{{ exercise.id or exercise.name|replace(' ', '_') }}">
                                 <div style="flex: 1;">
                                     <div class="exercise-name">
                                         {% if exercise.order %}{{ exercise.order }}. {% endif %}
                                         {{ exercise.name }}
+                                        {% if exercise.modifications %}
+                                            <span class="modification-icon">⚠️</span>
+                                        {% endif %}
                                     </div>
                                     
                                     <!-- Exercise Details Toggle -->
-                                    {% if exercise.instructions or exercise.primary_muscles or exercise.equipment %}
+                                    {% if exercise.instructions or exercise.primary_muscles or exercise.equipment or exercise.modifications %}
                                         <button class="exercise-details-toggle" onclick="toggleExerciseDetails(this)">
                                             Show details ▼
                                         </button>
@@ -329,7 +423,7 @@
                                 </div>
                                 
                                 <!-- Expandable Exercise Details -->
-                                {% if exercise.instructions or exercise.primary_muscles or exercise.equipment %}
+                                {% if exercise.instructions or exercise.primary_muscles or exercise.equipment or exercise.modifications %}
                                     <div class="exercise-expanded">
                                         <div class="exercise-meta">
                                             {% if exercise.estimated_calories %}
@@ -360,10 +454,35 @@
                                                 </ol>
                                             </div>
                                         {% endif %}
+                                        
+                                        <!-- NEW: Exercise Modifications -->
+                                        {% if exercise.modifications %}
+                                            <div class="exercise-modifications">
+                                                <div class="modification-header">⚠️ Adjustment for your condition:</div>
+                                                {% for modification in exercise.modifications %}
+                                                    <div class="modification-item">
+                                                        <div class="modification-category">{{ modification.category }}</div>
+                                                        <div class="modification-text">{{ modification.text }}</div>
+                                                    </div>
+                                                {% endfor %}
+                                            </div>
+                                        {% endif %}
                                     </div>
                                 {% endif %}
                             </div>
                         {% endfor %}
+                        
+                        <!-- NEW: Day-Level Warnings -->
+                        {% if day.warnings %}
+                            <div class="day-warnings">
+                                <div class="day-warnings-header">
+                                    ⚕️ Important Notes
+                                </div>
+                                {% for warning in day.warnings %}
+                                    <div class="day-warning-item">{{ warning }}</div>
+                                {% endfor %}
+                            </div>
+                        {% endif %}
                     </div>
                 {% else %}
                     <!-- Rest or Recovery Day -->
