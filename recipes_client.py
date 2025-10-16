@@ -26,6 +26,9 @@ def _request(path: str, params: dict):
     r.raise_for_status()
     return r.json()
 
+
+
+
 def get_one_recipe(dense_query: str, meal_type: str, dietary: list = [], cal_min: int = None, cal_max: int = None,
                    protein_min: int = None, protein_max: int = None,
                    carbs_min: int = None, carbs_max: int = None,
@@ -67,5 +70,5 @@ def get_one_day_meal_plan(caloric_target: float, dietary: list = []):
         "dietary": dietary
     }
     logging.info(f"Requesting meal plan with params: {params}")
-    data = _request("/meal-plan", params)
+    data = _request("/meal-planning/one-day", params)
     return data
