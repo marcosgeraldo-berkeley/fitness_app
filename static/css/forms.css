@@ -360,3 +360,34 @@
     font-size: 12px;
     font-weight: bold;
 }
+
+/* special for height and weight */
+.height-inputs {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.form-input-small {
+    width: 65px;
+    text-align: center;
+}
+
+.input-separator {
+    font-size: 12px;
+    color: #666;
+    font-weight: 500;
+}
+
+.weight-input {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.input-unit {
+    font-size: 12px;
+    color: #666;
+    font-weight: 500;
+    min-width: 20px;
+}

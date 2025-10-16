@@ -59,12 +59,35 @@ workout_generator = WorkoutGenerator(fitplan_db='fitplan.db', exercise_db='exerc
 
 # ==================== METABOLIC CALCULATION FUNCTIONS ====================
 
-def calculate_bmr(weight_kg, height_cm, age, gender):
+def inches_to_cm(inches):
+    """Convert inches to centimeters"""
+    return round(inches * 2.54, 2)
+
+def lbs_to_kg(lbs):
+    """Convert pounds to kilograms"""
+    return round(lbs * 0.453592, 2)
+
+def inches_to_feet_inches(total_inches):
+    """Convert total inches back to feet and inches for display"""
+    feet = int(total_inches // 12)
+    inches = int(total_inches % 12)
+    return feet, inches
+
+def calculate_bmr(user):
     """Calculate Basal Metabolic Rate using Mifflin-St Jeor equation"""
-    if gender.lower() == 'male':
+    age = int(user['age'])
+    
+    # Convert from stored imperial to metric for calculation
+    height_cm = inches_to_cm(float(user['height']))  # height stored as inches
+    weight_kg = lbs_to_kg(float(user['weight']))     # weight stored as lbs
+    
+    gender = user['gender'].lower()
+    
+    if gender == 'male':
         bmr = (10 * weight_kg) + (6.25 * height_cm) - (5 * age) + 5
-    else:  # female
+    else:  # female, non-binary default to female formula
         bmr = (10 * weight_kg) + (6.25 * height_cm) - (5 * age) - 161
+    
     return round(bmr, 2)
 
 def calculate_tdee(bmr, activity_level):
@@ -149,7 +172,7 @@ def recalculate_nutrition_targets(user_id):
     weight_kg = float(user['weight']) * 0.453592  # Convert lbs to kg
     
     # Calculate BMR
-    bmr = calculate_bmr(weight_kg, height_cm, user['age'], user['gender'])
+    bmr = calculate_bmr(user)
     
     # Calculate TDEE (only if activity level is set)
     tdee = calculate_tdee(bmr, user['activity_level']) if user['activity_level'] else bmr
@@ -220,7 +243,7 @@ def init_db():
             age INTEGER,
             gender TEXT,
             weight REAL,
-            height TEXT,
+            height REAL,
             activity_level TEXT,
             fitness_goals TEXT,
             workout_schedule INTEGER,
@@ -378,12 +401,14 @@ def save_basic_info():
     
     gender = request.form['gender']
     age = request.form['age']
-    height = request.form['height']
-    weight = request.form['weight']
+    height_feet = int(request.form['height_feet'])
+    height_inches = int(request.form['height_inches'])
+    total_height_inches = (height_feet * 12) + height_inches
+    weight_lbs = float(request.form['weight_lbs'])
     
     conn = get_db_connection()
     conn.execute('UPDATE users SET gender = ?, age = ?, height = ?, weight = ? WHERE id = ?',
-                (gender, age, height, weight, session['user_id']))
+                (gender, age, total_height_inches, weight_lbs, session['user_id']))
     conn.commit()
     conn.close()
     
@@ -531,7 +556,7 @@ def save_equipment_access():
     
     return redirect(url_for('profile_summary'))
 
-@app.route('/profile-summary')
+@app.route('/profile_summary')
 def profile_summary():
     if 'user_id' not in session:
         return redirect(url_for('index'))
@@ -540,8 +565,17 @@ def profile_summary():
     user = conn.execute('SELECT * FROM users WHERE id = ?', 
                        (session['user_id'],)).fetchone()
     conn.close()
+        # Convert for display
+    feet, inches = inches_to_feet_inches(user['height'])
     
-    return render_template('profile_summary.html', user=user)
+    user_display = {
+        **dict(user),
+        'height_feet': feet,
+        'height_inches': inches,
+        'weight_display': f"{user['weight']} lbs"
+    }
+    
+    return render_template('profile_summary.html', user=user_display)
 
 @app.route('/create-plan', methods=['POST'])
 def create_plan():

@@ -15,39 +15,75 @@
         
         <form method="POST" action="{{ url_for('save_physical_limitations') }}" id="limitationsForm" autocomplete="off">
             <div class="goal-options">
-                <label class="goal-option multi-select" for="knee-issues">
-                    <input type="checkbox" name="physical_limitations" value="knee-issues" id="knee-issues">
-                    <div class="goal-icon">🦵</div>
+                <label class="goal-option multi-select" for="chest-shoulder">
+                    <input type="checkbox" name="physical_limitations" value="chest and shoulder issues" id="chest-shoulder">
+                    <div class="goal-icon">💪</div>
                     <div class="goal-text">
-                        <div class="goal-title">Knee Issues</div>
-                        <div class="goal-desc">Current or past knee injuries</div>
+                        <div class="goal-title">Chest & Shoulder Issues</div>
+                        <div class="goal-desc">Shoulder, chest, or rotator cuff problems</div>
                     </div>
                 </label>
                 
-                <label class="goal-option multi-select" for="back-problems">
-                    <input type="checkbox" name="physical_limitations" value="back-problems" id="back-problems">
-                    <div class="goal-icon">🏃</div>
+                <label class="goal-option multi-select" for="back-spinal">
+                    <input type="checkbox" name="physical_limitations" value="back and spinal issues" id="back-spinal">
+                    <div class="goal-icon">🫃</div>
                     <div class="goal-text">
-                        <div class="goal-title">Back Problems</div>
+                        <div class="goal-title">Back & Spinal Issues</div>
                         <div class="goal-desc">Lower or upper back pain/injury</div>
                     </div>
                 </label>
                 
-                <label class="goal-option multi-select" for="shoulder-arm">
-                    <input type="checkbox" name="physical_limitations" value="shoulder-arm" id="shoulder-arm">
-                    <div class="goal-icon">💪</div>
+                <label class="goal-option multi-select" for="arm-hand">
+                    <input type="checkbox" name="physical_limitations" value="arm and hand issues" id="arm-hand">
+                    <div class="goal-icon">🤲</div>
                     <div class="goal-text">
-                        <div class="goal-title">Shoulder/Arm Issues</div>
-                        <div class="goal-desc">Shoulder, elbow, or wrist problems</div>
+                        <div class="goal-title">Arm & Hand Issues</div>
+                        <div class="goal-desc">Elbow, wrist, or hand problems</div>
                     </div>
                 </label>
                 
-                <label class="goal-option multi-select" for="heart-condition">
-                    <input type="checkbox" name="physical_limitations" value="heart-condition" id="heart-condition">
+                <label class="goal-option multi-select" for="hip-lumbar">
+                    <input type="checkbox" name="physical_limitations" value="hip or lumbar issues" id="hip-lumbar">
+                    <div class="goal-icon">🦴</div>
+                    <div class="goal-text">
+                        <div class="goal-title">Hip or Lumbar Issues</div>
+                        <div class="goal-desc">Hip flexor or lower spine problems</div>
+                    </div>
+                </label>
+                
+                <label class="goal-option multi-select" for="knee-foot">
+                    <input type="checkbox" name="physical_limitations" value="knee and foot issues" id="knee-foot">
+                    <div class="goal-icon">🦵</div>
+                    <div class="goal-text">
+                        <div class="goal-title">Knee & Foot Issues</div>
+                        <div class="goal-desc">Knee, ankle, or foot injuries</div>
+                    </div>
+                </label>
+                
+                <label class="goal-option multi-select" for="cardiovascular">
+                    <input type="checkbox" name="physical_limitations" value="cardiovascular issues" id="cardiovascular">
                     <div class="goal-icon">❤️</div>
                     <div class="goal-text">
-                        <div class="goal-title">Heart Condition</div>
-                        <div class="goal-desc">Cardiovascular limitations</div>
+                        <div class="goal-title">Cardiovascular Issues</div>
+                        <div class="goal-desc">Heart or circulation concerns</div>
+                    </div>
+                </label>
+                
+                <label class="goal-option multi-select" for="pregnancy">
+                    <input type="checkbox" name="physical_limitations" value="Pregnancy" id="pregnancy">
+                    <div class="goal-icon">🤰</div>
+                    <div class="goal-text">
+                        <div class="goal-title">Pregnancy</div>
+                        <div class="goal-desc">Currently pregnant</div>
+                    </div>
+                </label>
+                
+                <label class="goal-option multi-select" for="chronic-neuro">
+                    <input type="checkbox" name="physical_limitations" value="chronical or neurological issues" id="chronic-neuro">
+                    <div class="goal-icon">🧠</div>
+                    <div class="goal-text">
+                        <div class="goal-title">Chronic or Neurological</div>
+                        <div class="goal-desc">Chronic conditions or nerve issues</div>
                     </div>
                 </label>
                 
@@ -74,4 +110,31 @@
 
 {% block extra_js %}
 <script src="{{ url_for('static', filename='js/forms.js') }}"></script>
+<script>
+// Make "None" mutually exclusive with other limitations
+document.addEventListener('DOMContentLoaded', function() {
+    const noneCheckbox = document.getElementById('no-limitations');
+    const otherCheckboxes = document.querySelectorAll('input[name="physical_limitations"]:not(#no-limitations)');
+    
+    // When "None" is checked, uncheck all others
+    noneCheckbox.addEventListener('change', function() {
+        if (this.checked) {
+            otherCheckboxes.forEach(cb => {
+                cb.checked = false;
+                cb.closest('.goal-option').classList.remove('selected');
+            });
+        }
+    });
+    
+    // When any other checkbox is checked, uncheck "None"
+    otherCheckboxes.forEach(checkbox => {
+        checkbox.addEventListener('change', function() {
+            if (this.checked) {
+                noneCheckbox.checked = false;
+                noneCheckbox.closest('.goal-option').classList.remove('selected');
+            }
+        });
+    });
+});
+</script>
 {% endblock %}

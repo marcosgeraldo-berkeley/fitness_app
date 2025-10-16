@@ -1,6 +1,6 @@
 """
-FitPlan Workout Generator v2.0
-Research-based exercise recommendation system with user preference integration
+FitPlan Workout Generator v2.1
+Research-based exercise recommendation system with contraindication filtering
 """
 
 import sqlite3
@@ -33,7 +33,7 @@ class WorkoutGenerator:
             'weight': float(user['weight']),  # in lbs
             'fitness_goal': user['fitness_goals'],
             'activity_level': user['activity_level'],
-            'workout_schedule': user['workout_schedule'],  # NEW: User preference (1, 3, 5, or 7)
+            'workout_schedule': user['workout_schedule'],
             'physical_limitations': json.loads(user['physical_limitations']) if user['physical_limitations'] else [],
             'available_equipment': json.loads(user['available_equipment']) if user['available_equipment'] else [],
             'tdee': user['tdee'],
@@ -78,12 +78,12 @@ class WorkoutGenerator:
         
         # Ideal days by fitness goal (research-based)
         goal_ideal_days = {
-            'weight-loss': 5,      # High frequency for calorie burn
-            'strength': 4,          # Need recovery between heavy sessions
-            'muscle-building': 5,   # Volume distribution
-            'endurance': 6,         # Frequency for aerobic adaptation
-            'general_fitness': 3,   # Balanced sustainability
-            'maintenance': 3        # Minimal effective dose
+            'weight-loss': 5,
+            'strength': 4,
+            'muscle-building': 5,
+            'endurance': 6,
+            'general_fitness': 3,
+            'maintenance': 3
         }
         ideal_days = goal_ideal_days.get(fitness_goal, 3)
         
@@ -103,7 +103,6 @@ class WorkoutGenerator:
         if ideal_days in user_range:
             selected_days = ideal_days
         else:
-            # Pick closest value in range
             selected_days = min(user_range, key=lambda x: abs(x - ideal_days))
         
         # Apply safety override
@@ -119,36 +118,28 @@ class WorkoutGenerator:
             )
             selected_days = max_safe_days
         
-        # Warn if preference is below ideal
         elif selected_days < ideal_days and selected_days == max(user_range):
             warning_flag = 'suboptimal_frequency'
             goal_name = fitness_goal.replace('-', ' ').replace('_', ' ').title()
             warning_message = (
                 f"💡 For optimal {goal_name} results, we recommend {ideal_days} days per week. "
                 f"You're currently training {selected_days} days. Consider increasing your workout "
-                f"frequency in your profile settings for better results. With only {selected_days} days, "
-                f"we've packed more exercises into each session."
+                f"frequency in your profile settings for better results."
             )
         
-        # For 7-day schedules, note active recovery
         elif selected_days == 7:
             warning_flag = 'active_recovery_needed'
             warning_message = (
                 "🌱 Your plan includes daily training. We've included active recovery days with light "
-                "work (yoga, walking, stretching) to prevent burnout while keeping you active. "
-                "Listen to your body and take full rest if needed."
+                "work (yoga, walking, stretching) to prevent burnout while keeping you active."
             )
         
         return selected_days, warning_flag, warning_message
     
     def calculate_daily_volume(self, workout_days: int, fitness_goal: str, 
                               fitness_level: str) -> Dict:
-        """
-        Calculate exercises per day based on total weekly volume goals (research-based)
-        Returns: dict with exercises_per_day, sets, reps, rest, load%
-        """
+        """Calculate exercises per day based on total weekly volume goals"""
         
-        # Weekly set targets by goal (research-based)
         weekly_volume_targets = {
             'weight-loss': {'beginner': 70, 'intermediate': 85, 'advanced': 100},
             'strength': {'beginner': 40, 'intermediate': 55, 'advanced': 70},
@@ -161,7 +152,6 @@ class WorkoutGenerator:
         weekly_sets = weekly_volume_targets.get(fitness_goal, {}).get(fitness_level, 60)
         sets_per_day = weekly_sets / workout_days
         
-        # Goal-specific programming (research-based)
         goal_programming = {
             'strength': {
                 'sets_per_exercise': 4,
@@ -210,15 +200,11 @@ class WorkoutGenerator:
         programming = goal_programming.get(fitness_goal, goal_programming['general_fitness'])
         exercises_per_day = int(sets_per_day / programming['sets_per_exercise'])
         
-        # Adjust for workout frequency
         if workout_days <= 2:
-            # Full body workouts need more exercises
             exercises_per_day = max(exercises_per_day, 8)
         elif workout_days >= 6:
-            # Body part splits need fewer exercises per day
             exercises_per_day = min(exercises_per_day, 5)
         
-        # Ensure reasonable range
         exercises_per_day = max(4, min(exercises_per_day, 12))
         
         return {
@@ -233,7 +219,6 @@ class WorkoutGenerator:
     def get_workout_split(self, days_per_week: int, fitness_level: str, fitness_goal: str) -> List[Dict]:
         """Enhanced workout split structure with all day options (1-7 days)"""
         
-        # 1-DAY SPLIT
         if days_per_week == 1:
             return [{
                 'day': 'Wednesday',
@@ -241,7 +226,6 @@ class WorkoutGenerator:
                 'muscle_groups': ['chest', 'back', 'quadriceps', 'shoulders', 'biceps', 'triceps']
             }]
         
-        # 2-DAY SPLIT
         if days_per_week == 2:
             if fitness_level == 'beginner':
                 return [
@@ -254,7 +238,6 @@ class WorkoutGenerator:
                     {'day': 'Thursday', 'focus': 'Lower Body', 'muscle_groups': ['quadriceps', 'hamstrings', 'glutes', 'calves', 'abdominals']}
                 ]
         
-        # 3-DAY SPLIT
         if days_per_week == 3:
             if fitness_level == 'beginner':
                 return [
@@ -269,7 +252,6 @@ class WorkoutGenerator:
                     {'day': 'Friday', 'focus': 'Legs & Core', 'muscle_groups': ['quadriceps', 'hamstrings', 'glutes', 'abdominals', 'calves']}
                 ]
         
-        # 4-DAY SPLIT (NEW)
         if days_per_week == 4:
             if fitness_goal in ['strength', 'muscle-building']:
                 return [
@@ -278,7 +260,7 @@ class WorkoutGenerator:
                     {'day': 'Thursday', 'focus': 'Upper Body B', 'muscle_groups': ['back', 'lats', 'biceps', 'forearms']},
                     {'day': 'Saturday', 'focus': 'Lower Body B', 'muscle_groups': ['quadriceps', 'calves', 'abdominals']}
                 ]
-            else:  # weight-loss, endurance
+            else:
                 return [
                     {'day': 'Monday', 'focus': 'Full Body Circuit', 'muscle_groups': ['chest', 'back', 'quadriceps']},
                     {'day': 'Tuesday', 'focus': 'Cardio & Core', 'muscle_groups': ['abdominals', 'cardio']},
@@ -286,7 +268,6 @@ class WorkoutGenerator:
                     {'day': 'Saturday', 'focus': 'HIIT & Conditioning', 'muscle_groups': ['chest', 'back', 'quadriceps']}
                 ]
         
-        # 5-DAY SPLIT
         if days_per_week == 5:
             if fitness_level == 'beginner':
                 return [
@@ -305,7 +286,6 @@ class WorkoutGenerator:
                     {'day': 'Saturday', 'focus': 'Full Body', 'muscle_groups': ['chest', 'back', 'quadriceps', 'shoulders']}
                 ]
         
-        # 6-DAY SPLIT (NEW)
         if days_per_week == 6:
             return [
                 {'day': 'Monday', 'focus': 'Push A', 'muscle_groups': ['chest', 'shoulders', 'triceps']},
@@ -316,7 +296,6 @@ class WorkoutGenerator:
                 {'day': 'Saturday', 'focus': 'Legs B & Core', 'muscle_groups': ['quadriceps', 'calves', 'abdominals']}
             ]
         
-        # 7-DAY SPLIT (NEW) - Includes active recovery
         if days_per_week == 7:
             return [
                 {'day': 'Monday', 'focus': 'Chest & Triceps', 'muscle_groups': ['chest', 'triceps']},
@@ -330,52 +309,77 @@ class WorkoutGenerator:
                  'description': 'Swimming, easy cycling, or mobility work'}
             ]
         
-        # Default fallback
         return self.get_workout_split(3, fitness_level, fitness_goal)
     
-    def filter_exercises_by_contraindications(self, physical_limitations: List[str]) -> List[str]:
-        """Get list of exercise IDs to exclude based on physical limitations"""
-        if not physical_limitations:
-            return []
+    def get_contraindication_info(self, physical_limitations: List[str]) -> Dict:
+        """
+        Get comprehensive contraindication information for filtering
+        Returns: {
+            'excluded_exercises': [exercise_ids without modifications],
+            'modified_exercises': {exercise_id: modification_text},
+            'categories': [category names]
+        }
+        """
+        if not physical_limitations or 'none' in physical_limitations:
+            return {
+                'excluded_exercises': [],
+                'modified_exercises': {},
+                'categories': []
+            }
         
         conn = sqlite3.connect(self.exercise_db)
         conn.row_factory = sqlite3.Row
         
-        # Map common limitation names to database categories
-        limitation_mapping = {
-            'back_problems': 'back and spinal issues',
-            'knee_issues': 'knee and foot issues',
-            'shoulder_issues': 'chest and shoulder issues',
-            'hip_problems': 'hip or lumbar issues',
-            'wrist_issues': 'arm and hand issues',
-            'pregnancy': 'Pregnancy',
-            'chronic_conditions': 'chronical or neurological issues'
-        }
+        # Get exercises with contraindications in selected categories
+        placeholders = ','.join('?' * len(physical_limitations))
         
-        # Get actual category names from limitations
-        categories = [limitation_mapping.get(lim, lim) for lim in physical_limitations]
-        
-        placeholders = ','.join('?' * len(categories))
-        query = f'''
+        # Find exercises with contraindications
+        contraindicated_query = f'''
             SELECT DISTINCT ec.exercise_id
             FROM exercise_contraindications ec
             JOIN contraindications c ON ec.contraindication_id = c.contraindication_id
             JOIN modification_categories mc ON c.category_id = mc.category_id
             WHERE mc.category_name IN ({placeholders})
-                AND c.severity IN ('high', 'moderate')
         '''
+        contraindicated = conn.execute(contraindicated_query, physical_limitations).fetchall()
+        contraindicated_ids = [row['exercise_id'] for row in contraindicated]
         
-        excluded = conn.execute(query, categories).fetchall()
+        # Find which of these have modifications in the same categories
+        modified_exercises = {}
+        for exercise_id in contraindicated_ids:
+            mod_query = f'''
+                SELECT em.modification_text, mc.category_name
+                FROM exercise_modifications em
+                JOIN modification_categories mc ON em.category_id = mc.category_id
+                WHERE em.exercise_id = ?
+                    AND mc.category_name IN ({placeholders})
+                    AND mc.category_type = 'contraindication'
+            '''
+            mods = conn.execute(mod_query, [exercise_id] + physical_limitations).fetchall()
+            
+            if mods:
+                # Store all modifications for this exercise
+                modified_exercises[exercise_id] = [
+                    {'category': mod['category_name'], 'text': mod['modification_text']}
+                    for mod in mods
+                ]
+        
+        # Exercises to exclude (have contraindications but NO modifications)
+        excluded = [ex_id for ex_id in contraindicated_ids if ex_id not in modified_exercises]
+        
         conn.close()
         
-        return [row['exercise_id'] for row in excluded]
+        return {
+            'excluded_exercises': excluded,
+            'modified_exercises': modified_exercises,
+            'categories': physical_limitations
+        }
     
     def filter_exercises_by_equipment(self, available_equipment: List[str]) -> List[str]:
         """Build list of equipment for filtering"""
         if not available_equipment:
             return ['body only']
         
-        # Map common equipment names to database values
         equipment_mapping = {
             'bodyweight': 'body only',
             'dumbbells': 'dumbbell',
@@ -388,22 +392,19 @@ class WorkoutGenerator:
         }
         
         db_equipment = [equipment_mapping.get(eq, eq) for eq in available_equipment]
-        db_equipment.append('body only')  # Always include bodyweight
+        db_equipment.append('body only')
         
-        return list(set(db_equipment))  # Remove duplicates
+        return list(set(db_equipment))
     
-    def get_eligible_exercises(self, user_profile: Dict, fitness_level: str) -> List[Dict]:
-        """Get all exercises that pass filtering criteria"""
+    def get_eligible_exercises(self, user_profile: Dict, fitness_level: str, 
+                              contraindication_info: Dict) -> List[Dict]:
+        """Get all exercises with contraindication priority"""
         conn = sqlite3.connect(self.exercise_db)
         conn.row_factory = sqlite3.Row
         
-        # Get excluded exercises
-        excluded_ids = self.filter_exercises_by_contraindications(user_profile['physical_limitations'])
-        
-        # Get equipment list
+        excluded_ids = contraindication_info['excluded_exercises']
         equipment_list = self.filter_exercises_by_equipment(user_profile['available_equipment'])
         
-        # Determine appropriate difficulty levels
         level_map = {
             'beginner': ['beginner'],
             'intermediate': ['beginner', 'intermediate'],
@@ -411,7 +412,6 @@ class WorkoutGenerator:
         }
         allowed_levels = level_map[fitness_level]
         
-        # Build query
         excluded_placeholder = ','.join('?' * len(excluded_ids)) if excluded_ids else "''"
         equipment_placeholder = ','.join('?' * len(equipment_list))
         level_placeholder = ','.join('?' * len(allowed_levels))
@@ -454,16 +454,34 @@ class WorkoutGenerator:
         exercises = conn.execute(query, params).fetchall()
         conn.close()
         
-        return [dict(ex) for ex in exercises]
+        result = []
+        for ex in exercises:
+            ex_dict = dict(ex)
+            # Add contraindication priority flag
+            if ex_dict['id'] in contraindication_info['modified_exercises']:
+                ex_dict['contraindication_status'] = 'modified'
+                ex_dict['modifications'] = contraindication_info['modified_exercises'][ex_dict['id']]
+            else:
+                ex_dict['contraindication_status'] = 'safe'
+                ex_dict['modifications'] = []
+            result.append(ex_dict)
+        
+        return result
     
     def score_exercise(self, exercise: Dict, target_muscles: List[str], 
                        fitness_goal: str, already_selected: List[str]) -> float:
-        """Score exercise for selection priority"""
+        """Score exercise with contraindication priority"""
         score = 100.0
+        
+        # PRIORITY: Contraindication status
+        if exercise['contraindication_status'] == 'safe':
+            score += 50  # Highest priority
+        elif exercise['contraindication_status'] == 'modified':
+            score += 25  # Second priority
         
         primary_muscles = exercise['primary_muscles'].split(',') if exercise['primary_muscles'] else []
         
-        # Muscle group match (highest priority)
+        # Muscle group match
         muscle_match = len(set(primary_muscles) & set(target_muscles))
         score += muscle_match * 25
         
@@ -481,7 +499,7 @@ class WorkoutGenerator:
         elif fitness_goal == 'endurance' and exercise['category'] in ['cardio', 'plyometrics']:
             score += 15
         
-        # Equipment preference (bodyweight bonus for accessibility)
+        # Equipment preference
         if exercise['equipment'] in ['body only', None]:
             score += 8
         
@@ -489,7 +507,7 @@ class WorkoutGenerator:
         if exercise['id'] in already_selected:
             score -= 100
         
-        # Slight randomness for variety
+        # Slight randomness
         score += random.uniform(-3, 3)
         
         return score
@@ -497,17 +515,42 @@ class WorkoutGenerator:
     def select_exercises_for_day(self, eligible_exercises: List[Dict], 
                                  day_info: Dict, fitness_level: str, 
                                  fitness_goal: str, target_count: int,
-                                 already_selected: List[str]) -> List[Dict]:
+                                 already_selected: List[str]) -> Tuple[List[Dict], List[str]]:
         """
-        Select exercises for a single workout day with goal-specific ratios
+        Select exercises for a day and return warnings for missing muscle groups
+        Returns: (selected_exercises, warnings)
         """
-        # Handle recovery days
         if day_info.get('type') == 'recovery':
-            return []
+            return [], []
         
         target_muscles = day_info['muscle_groups']
+        warnings = []
         
-        # Goal-specific exercise mix ratios (research-based)
+        # Check if we have exercises for each target muscle
+        available_muscles = set()
+        for ex in eligible_exercises:
+            primary = ex['primary_muscles'].split(',') if ex['primary_muscles'] else []
+            available_muscles.update([m.strip() for m in primary])
+        
+        missing_muscles = set(target_muscles) - available_muscles
+        if missing_muscles:
+            for muscle in missing_muscles:
+                warnings.append(
+                    f"⚕️ {muscle.title()}: To exercise this muscle group, consult your doctor or "
+                    f"physical therapist for appropriate exercises that fit your needs."
+                )
+        
+        # Filter exercises for this day
+        relevant_exercises = []
+        for ex in eligible_exercises:
+            primary = ex['primary_muscles'].split(',') if ex['primary_muscles'] else []
+            if any(muscle.strip() in target_muscles for muscle in primary):
+                relevant_exercises.append(ex)
+        
+        if not relevant_exercises:
+            return [], warnings
+        
+        # Goal-specific ratios
         exercise_ratios = {
             'strength': {'compound': 0.70, 'isolation': 0.30},
             'muscle-building': {'compound': 0.50, 'isolation': 0.50},
@@ -520,16 +563,6 @@ class WorkoutGenerator:
         ratio = exercise_ratios.get(fitness_goal, {'compound': 0.55, 'isolation': 0.45})
         num_compound = max(1, int(target_count * ratio['compound']))
         num_isolation = target_count - num_compound
-        
-        # Filter exercises that target the day's muscle groups
-        relevant_exercises = []
-        for ex in eligible_exercises:
-            primary = ex['primary_muscles'].split(',') if ex['primary_muscles'] else []
-            if any(muscle.strip() in target_muscles for muscle in primary):
-                relevant_exercises.append(ex)
-        
-        if not relevant_exercises:
-            return []
         
         # Separate by type
         compound_exercises = [ex for ex in relevant_exercises if ex['mechanic'] == 'compound']
@@ -550,7 +583,7 @@ class WorkoutGenerator:
         selected.extend(compound_exercises[:num_compound])
         selected.extend(isolation_exercises[:num_isolation])
         
-        # If we don't have enough, fill with any remaining relevant exercises
+        # Fill remaining slots
         if len(selected) < target_count:
             remaining = [ex for ex in relevant_exercises 
                         if ex['id'] not in [s['id'] for s in selected]]
@@ -560,19 +593,16 @@ class WorkoutGenerator:
             )
             selected.extend(remaining[:target_count - len(selected)])
         
-        return selected
+        return selected, warnings
     
     def calculate_programming(self, exercise: Dict, fitness_level: str, 
                              fitness_goal: str, goal_programming: Dict) -> Dict:
-        """
-        Determine sets, reps, rest for an exercise using research-based values
-        """
+        """Determine sets, reps, rest for an exercise"""
         sets = goal_programming['sets_per_exercise']
         rest = goal_programming['rest_seconds']
         reps_min = goal_programming['reps_min']
         reps_max = goal_programming['reps_max']
         
-        # Use average for display
         reps = int((reps_min + reps_max) / 2)
         
         return {
@@ -587,35 +617,24 @@ class WorkoutGenerator:
         """Calculate time and calories for an exercise"""
         weight_kg = weight_lbs * 0.453592
         
-        # Get calorie burn rate (cal/min)
         cal_per_min = exercise.get(f'calories_{fitness_level}', 5.0)
         if not cal_per_min:
-            # Estimate based on exercise type
             if exercise['mechanic'] == 'compound':
                 cal_per_min = {'beginner': 5.0, 'intermediate': 6.0, 'advanced': 7.0}[fitness_level]
             else:
                 cal_per_min = {'beginner': 3.5, 'intermediate': 4.5, 'advanced': 5.5}[fitness_level]
         
-        # Calculate time: (reps * 3 seconds per rep + rest) * sets / 60
         time_per_set = (programming['reps'] * 3 + programming['rest_seconds']) / 60
         total_time = time_per_set * programming['sets']
-        
-        # Calculate calories
         calories = cal_per_min * total_time
         
         return total_time, calories
     
     def generate_weekly_plan(self, user_id: int) -> Dict:
-        """
-        Main method to generate complete weekly workout plan with user preferences
-        """
-        # Get user profile
+        """Main method to generate complete weekly workout plan"""
         user_profile = self.get_user_profile(user_id)
-        
-        # Determine fitness level
         fitness_level = self.determine_fitness_level(user_profile['activity_level'], user_profile['age'])
         
-        # NEW: Determine workout days with user preference and safety checks
         workout_days, warning_flag, warning_message = self.determine_workout_days(
             user_profile['workout_schedule'],
             user_profile['fitness_goal'],
@@ -623,28 +642,28 @@ class WorkoutGenerator:
             user_profile['age']
         )
         
-        # NEW: Calculate daily volume with research-based programming
         volume_config = self.calculate_daily_volume(workout_days, user_profile['fitness_goal'], fitness_level)
-        
-        # Get workout split
         split = self.get_workout_split(workout_days, fitness_level, user_profile['fitness_goal'])
         
-        # Get eligible exercises
-        eligible_exercises = self.get_eligible_exercises(user_profile, fitness_level)
+        # NEW: Get contraindication info
+        contraindication_info = self.get_contraindication_info(user_profile['physical_limitations'])
+        
+        # Get eligible exercises with contraindication filtering
+        eligible_exercises = self.get_eligible_exercises(user_profile, fitness_level, contraindication_info)
         
         if not eligible_exercises:
             raise ValueError("No eligible exercises found with current filters")
         
-        # Generate workout for each day
         weekly_plan = {
             'user_id': user_id,
             'week_of': datetime.now().strftime('%Y-%m-%d'),
             'fitness_level': fitness_level,
             'workout_days_per_week': workout_days,
-            'user_preference': user_profile['workout_schedule'],  # NEW
-            'warning_flag': warning_flag,  # NEW
-            'warning_message': warning_message,  # NEW
-            'programming_notes': {  # NEW
+            'user_preference': user_profile['workout_schedule'],
+            'physical_limitations': user_profile['physical_limitations'],
+            'warning_flag': warning_flag,
+            'warning_message': warning_message,
+            'programming_notes': {
                 'rep_range': f"{volume_config['reps_min']}-{volume_config['reps_max']}",
                 'rest_seconds': volume_config['rest_seconds'],
                 'load_percentage': volume_config['load_percentage']
@@ -656,7 +675,6 @@ class WorkoutGenerator:
         already_selected = []
         
         for day_info in split:
-            # Handle recovery days
             if day_info.get('type') == 'recovery':
                 weekly_plan['days'].append({
                     'day': day_info['day'],
@@ -668,15 +686,14 @@ class WorkoutGenerator:
                 })
                 continue
             
-            # Select exercises
-            exercises = self.select_exercises_for_day(
+            # Select exercises with warnings
+            exercises, day_warnings = self.select_exercises_for_day(
                 eligible_exercises, day_info, fitness_level, 
                 user_profile['fitness_goal'], 
                 volume_config['exercises_per_day'],
                 already_selected
             )
             
-            # Calculate programming and metrics
             day_exercises = []
             day_calories = 0
             day_duration = 0
@@ -689,7 +706,7 @@ class WorkoutGenerator:
                     exercise, programming, user_profile['weight'], fitness_level
                 )
                 
-                day_exercises.append({
+                ex_data = {
                     'order': i,
                     'id': exercise['id'],
                     'name': exercise['name'],
@@ -703,25 +720,37 @@ class WorkoutGenerator:
                     'primary_muscles': exercise['primary_muscles'].split(',') if exercise['primary_muscles'] else [],
                     'equipment': exercise['equipment'],
                     'images': json.loads(exercise['images']) if exercise['images'] else []
-                })
+                }
                 
+                # NEW: Add modifications if present
+                if exercise['modifications']:
+                    ex_data['modifications'] = [
+                        {'category': mod['category'], 'text': mod['text']}
+                        for mod in exercise['modifications']
+                    ]
+                
+                day_exercises.append(ex_data)
                 day_calories += calories
                 day_duration += time
                 already_selected.append(exercise['id'])
             
-            # Add workout day
-            weekly_plan['days'].append({
+            day_data = {
                 'day': day_info['day'],
                 'focus': day_info['focus'],
                 'target_muscles': day_info['muscle_groups'],
                 'duration_minutes': round(day_duration, 1),
                 'estimated_calories': round(day_calories, 1),
                 'exercises': day_exercises
-            })
+            }
             
+            # NEW: Add warnings if any
+            if day_warnings:
+                day_data['warnings'] = day_warnings
+            
+            weekly_plan['days'].append(day_data)
             weekly_plan['total_weekly_calories'] += day_calories
         
-        # Add rest days for days not in the split
+        # Add rest days
         all_days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
         workout_day_names = [d['day'] for d in weekly_plan['days']]
         
@@ -736,7 +765,7 @@ class WorkoutGenerator:
                     'description': 'Complete rest. Your muscles grow during recovery, not during workouts.'
                 })
         
-        # Sort days by week order
+        # Sort by day order
         day_order = {day: i for i, day in enumerate(all_days)}
         weekly_plan['days'].sort(key=lambda x: day_order[x['day']])
         
@@ -745,22 +774,19 @@ class WorkoutGenerator:
         return weekly_plan
 
 
-# ==================== STANDALONE USAGE ====================
-
 def main():
     """Example usage"""
     generator = WorkoutGenerator()
     
-    # Generate plan for user ID 1
     try:
         plan = generator.generate_weekly_plan(user_id=1)
         
-        # Print summary
         print(f"\n{'='*70}")
         print(f"WEEKLY WORKOUT PLAN - Week of {plan['week_of']}")
         print(f"{'='*70}")
         print(f"Fitness Level: {plan['fitness_level'].title()}")
-        print(f"Workout Days: {plan['workout_days_per_week']} days/week (User preference: {plan['user_preference']})")
+        print(f"Physical Limitations: {', '.join(plan['physical_limitations']) if plan['physical_limitations'] else 'None'}")
+        print(f"Workout Days: {plan['workout_days_per_week']} days/week")
         if plan['warning_message']:
             print(f"\n⚠️  {plan['warning_message']}")
         print(f"\nProgramming: {plan['programming_notes']['rep_range']} reps, "
@@ -778,15 +804,27 @@ def main():
                     print(f"  {day['description']}")
             else:
                 print(f"Duration: {day['duration_minutes']} min | Calories: {day['estimated_calories']} kcal")
-                print(f"\nExercises:")
+                
+                # Show warnings if any
+                if 'warnings' in day:
+                    print(f"\n  WARNINGS:")
+                    for warning in day['warnings']:
+                        print(f"  {warning}")
+                
+                print(f"\n  Exercises:")
                 for ex in day['exercises']:
                     print(f"  {ex['order']}. {ex['name']}")
                     print(f"     {ex['sets']} sets × {ex['reps_range']} reps (Rest: {ex['rest_seconds']}s)")
                     print(f"     Muscles: {', '.join(ex['primary_muscles'])}")
+                    
+                    # Show modifications if present
+                    if 'modifications' in ex:
+                        print(f"     ⚕️ MODIFICATIONS:")
+                        for mod in ex['modifications']:
+                            print(f"        • {mod['category']}: {mod['text']}")
             
             print("-" * 70)
         
-        # Save to JSON
         output_file = f"workout_plan_user_{plan['user_id']}.json"
         with open(output_file, 'w') as f:
             json.dump(plan, f, indent=2)

@@ -9,6 +9,24 @@ document.addEventListener('DOMContentLoaded', function() {
     initializeProgressSaving();
 });
 
+// Validate height inputs
+document.getElementById('basicInfoForm')?.addEventListener('submit', function(e) {
+    const feet = parseInt(this.querySelector('input[name="height_feet"]').value);
+    const inches = parseInt(this.querySelector('input[name="height_inches"]').value);
+    
+    if (feet < 3 || feet > 8) {
+        e.preventDefault();
+        alert('Please enter a valid height (3-8 feet)');
+        return;
+    }
+    
+    if (inches < 0 || inches > 11) {
+        e.preventDefault();
+        alert('Inches must be between 0 and 11');
+        return;
+    }
+});
+
 // Unit selector functionality (lbs/kg, ft/cm)
 function initializeUnitSelectors() {
     const unitSelectors = document.querySelectorAll('.unit-selector');
@@ -32,6 +50,7 @@ function initializeUnitSelectors() {
         });
     });
 }
+
 
 function updateInputForUnit(unitOption) {
     const unit = unitOption.dataset.unit;
