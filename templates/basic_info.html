@@ -5,11 +5,12 @@
 {% block content %}
 <div class="phone-frame">
     <div class="progress-bar">
-        <div class="progress-fill" style="width: 14%"></div>
+        <div class="progress-fill" style="width: 12%"></div>
     </div>
-    <div class="step-indicator">Step 1 of 7 • Basic Information</div>
+    <div class="step-indicator">Step 1 of 8 • Basic Information</div>
     
     <div class="scrollable-content">
+        <h3 style="font-size: 18px; margin-bottom: 10px; text-align: center;">How would you describe yourself?</h3>
         <form method="POST" action="{{ url_for('save_basic_info') }}" id="basicInfoForm" autocomplete="off">
             <div class="form-group">
                 <label class="form-label">Gender</label>
