@@ -4,6 +4,8 @@ import hashlib
 import json
 import os
 from datetime import datetime, timedelta
+from services.meal_api_client import MealPlanningAPI, MealPlanningAPIError
+import logging
 
 app = Flask(__name__)
 app.secret_key = 'your-secret-key-here'  # Change this in production
@@ -182,6 +184,296 @@ def parse_height_to_cm(height_str):
     except:
         return 170  # default
 
+# ==================== MEAL PLANS ====================
+
+# Set up logging 
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Initialize meal API client 
+meal_api = MealPlanningAPI()
+
+# helper functions:
+
+def generate_grocery_list_from_meals(meal_plan):
+    """
+    Generate grocery list from meal plan API response
+    
+    Args:
+        meal_plan: Raw response from meal planning API
+    
+    Returns:
+        dict: Grocery list organized by sections
+    """
+    from collections import defaultdict
+    
+    if not meal_plan or 'daily_plans' not in meal_plan:
+        return get_sample_grocery_data()
+    
+    # Aggregate ingredients
+    ingredient_map = defaultdict(lambda: {
+        'quantities': [],
+        'units': [],
+        'meals': []
+    })
+    
+    for day in meal_plan.get('daily_plans', []):
+        for meal in day.get('meals', []):
+            if meal is None:
+                continue
+            
+            ingredients = meal.get('ingredients', [])
+            quantities = meal.get('quantities', [])
+            units = meal.get('units', [])
+            meal_title = meal.get('title', 'Unknown Meal')
+            
+            for i, ingredient in enumerate(ingredients):
+                qty = quantities[i] if i < len(quantities) else "1"
+                unit = units[i] if i < len(units) else "serving"
+                
+                ingredient_map[ingredient]['quantities'].append(qty)
+                ingredient_map[ingredient]['units'].append(unit)
+                ingredient_map[ingredient]['meals'].append(meal_title)
+    
+    # Organize into sections (simple categorization)
+    produce_keywords = ['lettuce', 'tomato', 'cucumber', 'onion', 'pepper', 'carrot', 
+                       'broccoli', 'spinach', 'kale', 'apple', 'banana', 'berry']
+    protein_keywords = ['chicken', 'beef', 'pork', 'fish', 'salmon', 'tuna', 
+                       'turkey', 'egg', 'tofu', 'tempeh']
+    dairy_keywords = ['milk', 'cheese', 'yogurt', 'butter', 'cream']
+    
+    produce_items = []
+    protein_items = []
+    dairy_items = []
+    pantry_items = []
+    
+    for ingredient, data in ingredient_map.items():
+        item = {
+            'name': ingredient,
+            'quantity': ', '.join(data['quantities'][:3])  # Show first 3 quantities
+        }
+        
+        ingredient_lower = ingredient.lower()
+        
+        if any(kw in ingredient_lower for kw in produce_keywords):
+            produce_items.append(item)
+        elif any(kw in ingredient_lower for kw in protein_keywords):
+            protein_items.append(item)
+        elif any(kw in ingredient_lower for kw in dairy_keywords):
+            dairy_items.append(item)
+        else:
+            pantry_items.append(item)
+    
+    # Build grocery data structure
+    grocery_data = {
+        'week': datetime.now().strftime("%B %d-%d"),
+        'sections': []
+    }
+    
+    if produce_items:
+        grocery_data['sections'].append({
+            'title': '🥬 Produce',
+            'items': sorted(produce_items, key=lambda x: x['name'])
+        })
+    
+    if protein_items:
+        grocery_data['sections'].append({
+            'title': '🥩 Protein',
+            'items': sorted(protein_items, key=lambda x: x['name'])
+        })
+    
+    if dairy_items:
+        grocery_data['sections'].append({
+            'title': '🥛 Dairy',
+            'items': sorted(dairy_items, key=lambda x: x['name'])
+        })
+    
+    if pantry_items:
+        grocery_data['sections'].append({
+            'title': '🌾 Pantry',
+            'items': sorted(pantry_items, key=lambda x: x['name'])
+        })
+    
+    return grocery_data
+
+def transform_meal_plan_for_templates(raw_meal_plan):
+    """
+    Transform API response to match the format expected by templates
+    NOW INCLUDES: instructions, ingredients, quantities, units for recipes
+    
+    Args:
+        raw_meal_plan: Response from meal planning API with structure:
+            {
+                "daily_plans": [
+                    {
+                        "day": 0,
+                        "target_calories": 2000,
+                        "total_calories": 1980,
+                        "meals": [...]
+                    }
+                ]
+            }
+    
+    Returns:
+        Dict in format expected by templates:
+            {
+                "week": "January 20-26",
+                "daily_calories": 2000,
+                "days": {
+                    "Monday": {
+                        "date": "January 20",
+                        "meals": [...with recipe data]
+                    },
+                    ...
+                }
+            }
+    """
+    from datetime import datetime, timedelta
+    
+    if not raw_meal_plan or 'daily_plans' not in raw_meal_plan:
+        return None
+    
+    day_names = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+    
+    # Calculate week range
+    today = datetime.now()
+    week_start = today
+    week_end = today + timedelta(days=6)
+    
+    transformed = {
+        "week": f"{week_start.strftime('%B %d')}-{week_end.strftime('%d')}",
+        "daily_calories": 0,
+        "days": {}
+    }
+    
+    daily_plans = raw_meal_plan['daily_plans']
+    
+    # Calculate average daily calories
+    if daily_plans:
+        avg_calories = sum(day.get('target_calories', 0) for day in daily_plans) / len(daily_plans)
+        transformed['daily_calories'] = int(avg_calories)
+    
+    # Transform each day
+    for i, day_plan in enumerate(daily_plans):
+        if i >= 7:  # Only handle up to 7 days
+            break
+        
+        day_name = day_names[i]
+        day_date = (week_start + timedelta(days=i)).strftime('%B %d')
+        
+        # Transform meals - NOW KEEPING ALL RECIPE DATA
+        transformed_meals = []
+        for meal in day_plan.get('meals', []):
+            if meal is None:
+                continue
+            
+            transformed_meal = {
+                'title': meal.get('title', 'Untitled Meal'),
+                'calories': meal.get('calories', 0),
+                'description': meal.get('description', ''),
+                'macros': meal.get('macros', {}),
+                # KEEP RECIPE DATA
+                'instructions': meal.get('instructions', ''),
+                'ingredients': meal.get('ingredients', []),
+                'quantities': meal.get('quantities', []),
+                'units': meal.get('units', []),
+                'meal_type': meal.get('meal_type', '')
+            }
+            
+            # Add meal type emoji
+            meal_type = meal.get('meal_type', '').lower()
+            if 'breakfast' in meal_type:
+                transformed_meal['title'] = f"🌅 {transformed_meal['title']}"
+            elif 'lunch' in meal_type:
+                transformed_meal['title'] = f"🥗 {transformed_meal['title']}"
+            elif 'dinner' in meal_type:
+                transformed_meal['title'] = f"🍽️ {transformed_meal['title']}"
+            elif 'snack' in meal_type:
+                transformed_meal['title'] = f"🥜 {transformed_meal['title']}"
+            
+            transformed_meals.append(transformed_meal)
+        
+        transformed['days'][day_name] = {
+            'date': day_date,
+            'meals': transformed_meals
+        }
+    
+    return transformed
+
+
+def get_sample_meal_data(user):
+    """Fallback sample meal plan when API is unavailable"""
+    return {
+        "week": datetime.now().strftime("%B %d-%d"),
+        "daily_calories": user['caloric_target'] if user['caloric_target'] else 1650,
+        "days": {
+            "Monday": {
+                "date": datetime.now().strftime("%B %d"),
+                "meals": [
+                    {
+                        "title": "🌅 Breakfast",
+                        "calories": 420,
+                        "description": "Greek Yogurt Parfait with gluten-free granola and blueberries",
+                        "macros": {"protein": "25g", "carbs": "45g", "fat": "18g"}
+                    },
+                    {
+                        "title": "🥗 Lunch", 
+                        "calories": 480,
+                        "description": "Grilled Chicken Quinoa Bowl with roasted vegetables",
+                        "macros": {"protein": "32g", "carbs": "42g", "fat": "16g"}
+                    },
+                    {
+                        "title": "🍽️ Dinner",
+                        "calories": 520,
+                        "description": "Baked Salmon with sweet potato and steamed broccoli", 
+                        "macros": {"protein": "35g", "carbs": "38g", "fat": "22g"}
+                    },
+                    {
+                        "title": "🥜 Snacks",
+                        "calories": 230,
+                        "description": "Apple with almond butter, herbal tea",
+                        "macros": {"protein": "8g", "carbs": "22g", "fat": "14g"}
+                    }
+                ]
+            }
+        }
+    }
+
+
+def get_sample_grocery_data():
+    """Fallback sample grocery list"""
+    return {
+        "week": datetime.now().strftime("%B %d-%d"),
+        "sections": [
+            {
+                "title": "🥬 Produce",
+                "items": [
+                    {"name": "Blueberries", "quantity": "2 cups"},
+                    {"name": "Broccoli crowns", "quantity": "2 heads"},
+                    {"name": "Sweet potatoes", "quantity": "3 medium"},
+                    {"name": "Apples", "quantity": "4 large"}
+                ]
+            },
+            {
+                "title": "🥩 Protein", 
+                "items": [
+                    {"name": "Chicken breast", "quantity": "2 lbs"},
+                    {"name": "Salmon fillets", "quantity": "4 pieces"},
+                    {"name": "Greek yogurt (plain)", "quantity": "32 oz"}
+                ]
+            },
+            {
+                "title": "🌾 Pantry",
+                "items": [
+                    {"name": "Quinoa", "quantity": "1 lb bag"},
+                    {"name": "GF granola", "quantity": "1 box"},
+                    {"name": "Almond butter", "quantity": "1 jar"}
+                ]
+            }
+        ]
+    }
+
+
 # ==================== DATABASE SETUP ====================
 
 def init_db():
@@ -253,6 +545,7 @@ def init_db():
 
     conn.commit()
     conn.close()
+
 
 # ==================== TEMPLATE FILTERS ====================
 
@@ -366,8 +659,6 @@ def save_basic_info():
     
     return redirect(url_for('activity_level'))
 
-# ==================== NEW ACTIVITY LEVEL ROUTES ====================
-
 @app.route('/activity-level')
 def activity_level():
     if 'user_id' not in session:
@@ -391,8 +682,6 @@ def save_activity_level():
     recalculate_nutrition_targets(session['user_id'])
     
     return redirect(url_for('fitness_goals'))
-
-# ==================== CONTINUING ROUTES ====================
 
 @app.route('/fitness-goals')
 def fitness_goals():
@@ -528,7 +817,7 @@ def profile_summary():
 
 @app.route('/create-plan', methods=['POST'])
 def create_plan():
-    """Modified version that uses the workout generator"""
+    """Generate workout and meal plans for the user"""
     if 'user_id' not in session:
         return redirect(url_for('index'))
     
@@ -536,102 +825,85 @@ def create_plan():
     week_date = datetime.now().strftime('%Y-%m-%d')
     
     try:
-        # GENERATE REAL WORKOUT PLAN
-        workout_data = workout_generator.generate_weekly_plan(user_id)
-        
-        # Get user data for meal calculations
+        # Get user data
         conn = get_db_connection()
         user = conn.execute('SELECT * FROM users WHERE id = ?', (user_id,)).fetchone()
         
-        # Sample meal plan data (you'll replace this with your meal generator later)
-        meal_data = {
-            "week": datetime.now().strftime("%B %d-%d"),
-            "daily_calories": user['caloric_target'] if user['caloric_target'] else 1650,
-            "days": {
-                "Monday": {
-                    "date": datetime.now().strftime("%B %d"),
-                    "meals": [
-                        {
-                            "title": "🌅 Breakfast",
-                            "calories": 420,
-                            "description": "Greek Yogurt Parfait with gluten-free granola and blueberries",
-                            "macros": {"protein": "25g", "carbs": "45g", "fat": "18g"}
-                        },
-                        {
-                            "title": "🥗 Lunch", 
-                            "calories": 480,
-                            "description": "Grilled Chicken Quinoa Bowl with roasted vegetables",
-                            "macros": {"protein": "32g", "carbs": "42g", "fat": "16g"}
-                        },
-                        {
-                            "title": "🍽️ Dinner",
-                            "calories": 520,
-                            "description": "Baked Salmon with sweet potato and steamed broccoli", 
-                            "macros": {"protein": "35g", "carbs": "38g", "fat": "22g"}
-                        },
-                        {
-                            "title": "🥜 Snacks",
-                            "calories": 230,
-                            "description": "Apple with almond butter, herbal tea",
-                            "macros": {"protein": "8g", "carbs": "22g", "fat": "14g"}
-                        }
-                    ]
-                }
-            }
-        }
+        # ============ GENERATE WORKOUT PLAN ============
+        logger.info(f"Generating workout plan for user {user_id}")
+        workout_data = workout_generator.generate_weekly_plan(user_id)
         
-        # Sample grocery list
-        grocery_data = {
-            "week": datetime.now().strftime("%B %d-%d"),
-            "sections": [
-                {
-                    "title": "🥬 Produce",
-                    "items": [
-                        {"name": "Blueberries", "quantity": "2 cups"},
-                        {"name": "Broccoli crowns", "quantity": "2 heads"},
-                        {"name": "Sweet potatoes", "quantity": "3 medium"},
-                        {"name": "Apples", "quantity": "4 large"}
-                    ]
-                },
-                {
-                    "title": "🥩 Protein", 
-                    "items": [
-                        {"name": "Chicken breast", "quantity": "2 lbs"},
-                        {"name": "Salmon fillets", "quantity": "4 pieces"},
-                        {"name": "Greek yogurt (plain)", "quantity": "32 oz"}
-                    ]
-                },
-                {
-                    "title": "🌾 Pantry",
-                    "items": [
-                        {"name": "Quinoa", "quantity": "1 lb bag"},
-                        {"name": "GF granola", "quantity": "1 box"},
-                        {"name": "Almond butter", "quantity": "1 jar"}
-                    ]
-                }
-            ],
-        }
+        # ============ GENERATE MEAL PLAN (NEW - API CALL) ============
+        logger.info(f"Generating meal plan for user {user_id}")
+        meal_data = None
+        grocery_data = None
+        
+        try:
+            # Parse dietary restrictions
+            dietary = []
+            if user['dietary_restrictions']:
+                try:
+                    restrictions = json.loads(user['dietary_restrictions'])
+                    dietary = [r.strip().lower() for r in restrictions if r.strip()]
+                except (json.JSONDecodeError, TypeError):
+                    dietary = []
+            
+            # Call meal planning API
+            raw_meal_plan = meal_api.generate_meal_plan(
+                target_calories=int(user['caloric_target'] or 2000),
+                dietary=dietary,
+                preferences=", ".join(dietary) if dietary else "",
+                num_days=7,
+                limit_per_meal=1
+            )
+            
+            if raw_meal_plan:
+                logger.info(f"✓ Successfully generated meal plan for user {user_id}")
+                meal_data = transform_meal_plan_for_templates(raw_meal_plan)
+                
+                # Generate grocery list from meal plan
+                grocery_data = generate_grocery_list_from_meals(raw_meal_plan)
+            else:
+                logger.warning(f"Meal API returned None, using fallback for user {user_id}")
+                meal_data = get_sample_meal_data(user)
+                grocery_data = get_sample_grocery_data()
+        
+        except MealPlanningAPIError as e:
+            logger.error(f"Meal API validation error: {str(e)}")
+            meal_data = get_sample_meal_data(user)
+            grocery_data = get_sample_grocery_data()
+            flash('Using sample meal plan - meal service unavailable', 'warning')
+        
+        except Exception as e:
+            logger.error(f"Error generating meal plan: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            meal_data = get_sample_meal_data(user)
+            grocery_data = get_sample_grocery_data()
+            flash('Using sample meal plan - error occurred', 'warning')
+        
+        # ============ SAVE EVERYTHING TO DATABASE ============
         
         # Save workout plan
         conn.execute('INSERT INTO workout_plans (user_id, week_date, plan_data) VALUES (?, ?, ?)',
                     (user_id, week_date, json.dumps(workout_data)))
         
-        # Save meal plan  
+        # Save meal plan
         conn.execute('INSERT INTO meal_plans (user_id, week_date, plan_data) VALUES (?, ?, ?)',
                     (user_id, week_date, json.dumps(meal_data)))
         
-        # Store grocery data
+        # Save grocery list
         conn.execute('INSERT INTO grocery_lists (user_id, week_date, grocery_data) VALUES (?, ?, ?)',
                     (user_id, week_date, json.dumps(grocery_data)))
         
         conn.commit()
         conn.close()
         
-        flash('Your personalized workout plan has been created!', 'success')
+        flash('Your personalized plans have been created!', 'success')
         return redirect(url_for('dashboard'))
         
     except Exception as e:
-        print(f"Error creating plan: {e}")
+        logger.error(f"Error in create_plan: {e}")
         import traceback
         traceback.print_exc()
         flash('Error creating plan. Please try again.', 'error')
@@ -672,8 +944,95 @@ def regenerate_workout():
         
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+@app.route('/regenerate-meal-plan', methods=['POST'])
+def regenerate_meal_plan():
+    """Regenerate meal plan for current user"""
+    if 'user_id' not in session:
+        return jsonify({"error": "Not authenticated"}), 401
     
+    try:
+        user_id = session['user_id']
+        
+        # Get user data
+        conn = get_db_connection()
+        user = conn.execute('SELECT * FROM users WHERE id = ?', (user_id,)).fetchone()
+        
+        # Parse dietary restrictions
+        dietary = []
+        if user['dietary_restrictions']:
+            try:
+                restrictions = json.loads(user['dietary_restrictions'])
+                dietary = [r.strip().lower() for r in restrictions if r.strip()]
+            except (json.JSONDecodeError, TypeError):
+                dietary = []
+        
+        # Call API
+        logger.info(f"Regenerating meal plan for user {user_id}")
+        raw_meal_plan = meal_api.generate_meal_plan(
+            target_calories=int(user['caloric_target'] or 2000),
+            dietary=dietary,
+            preferences=", ".join(dietary) if dietary else "",
+            num_days=7,
+            limit_per_meal=1
+        )
+        
+        if raw_meal_plan:
+            # Generate grocery list
+            grocery_data = generate_grocery_list_from_meals(raw_meal_plan)
+            
+            # Update database
+            week_date = datetime.now().strftime('%Y-%m-%d')
+            
+            conn.execute(
+                'DELETE FROM meal_plans WHERE user_id = ? AND week_date = ?',
+                (user_id, week_date)
+            )
+            conn.execute(
+                'INSERT INTO meal_plans (user_id, week_date, plan_data) VALUES (?, ?, ?)',
+                (user_id, week_date, json.dumps(raw_meal_plan))
+            )
+            
+            conn.execute(
+                'DELETE FROM grocery_lists WHERE user_id = ? AND week_date = ?',
+                (user_id, week_date)
+            )
+            conn.execute(
+                'INSERT INTO grocery_lists (user_id, week_date, grocery_data) VALUES (?, ?, ?)',
+                (user_id, week_date, json.dumps(grocery_data))
+            )
+            
+            conn.commit()
+            conn.close()
+            
+            return jsonify({
+                "success": True,
+                "message": "Meal plan regenerated",
+                "redirect": url_for('dashboard')
+            }), 200
+        else:
+            conn.close()
+            return jsonify({
+                "success": False,
+                "error": "Meal service unavailable"
+            }), 503
     
+    except MealPlanningAPIError as e:
+        logger.error(f"Validation error: {str(e)}")
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 400
+    
+    except Exception as e:
+        logger.error(f"Error regenerating meal plan: {str(e)}")
+        return jsonify({
+            "success": False,
+            "error": "Internal server error"
+        }), 500
+
+
 @app.route('/dashboard')
 def dashboard():
     if 'user_id' not in session:
@@ -805,8 +1164,18 @@ def meals_page():
                          first_day=first_day,
                          user_name=session.get('user_name'))
 
+@app.route('/recipe')
+def recipe_page():
+    """Display recipe page for a specific meal"""
+    if 'user_id' not in session:
+        return redirect(url_for('index'))
+    
+    # Recipe data is passed via sessionStorage in JavaScript
+    # This route just serves the template
+    return render_template('recipe.html', 
+                         user_name=session.get('user_name'))
 
-# NEW: Add grocery page route
+# Add grocery page route
 @app.route('/grocery')
 def grocery_page():
     if 'user_id' not in session:
@@ -880,7 +1249,66 @@ def generate_workout_plan():
 
 @app.route('/api/generate-meal-plan', methods=['POST']) 
 def generate_meal_plan():
-    return jsonify({"message": "Meal plan generation - Work in progress"})
+    """
+    API endpoint for meal plan generation (called from frontend JavaScript)
+    """
+    if 'user_id' not in session:
+        return jsonify({"error": "Not authenticated"}), 401
+    
+    try:
+        user_id = session['user_id']
+        
+        # Get user data
+        conn = get_db_connection()
+        user = conn.execute('SELECT * FROM users WHERE id = ?', (user_id,)).fetchone()
+        conn.close()
+        
+        # Get custom parameters from request if provided
+        data = request.json or {}
+        target_calories = data.get('target_calories', user['caloric_target'] or 2000)
+        num_days = data.get('num_days', 7)
+        
+        # Parse dietary restrictions
+        dietary = []
+        if user['dietary_restrictions']:
+            try:
+                restrictions = json.loads(user['dietary_restrictions'])
+                dietary = [r.strip().lower() for r in restrictions if r.strip()]
+            except (json.JSONDecodeError, TypeError):
+                dietary = []
+        
+        # Call API
+        meal_plan = meal_api.generate_meal_plan(
+            target_calories=int(target_calories),
+            dietary=dietary,
+            preferences=data.get('preferences', ", ".join(dietary) if dietary else ""),
+            num_days=num_days
+        )
+        
+        if meal_plan:
+            return jsonify({
+                "success": True,
+                "message": "Meal plan generated",
+                "plan": meal_plan
+            }), 200
+        else:
+            return jsonify({
+                "success": False,
+                "error": "Meal service unavailable"
+            }), 503
+    
+    except MealPlanningAPIError as e:
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 400
+    
+    except Exception as e:
+        logger.error(f"Error in API endpoint: {str(e)}")
+        return jsonify({
+            "success": False,
+            "error": "Internal server error"
+        }), 500
 
 @app.route('/api/generate-grocery-list', methods=['POST'])
 def generate_grocery_list():

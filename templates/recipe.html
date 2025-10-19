@@ -1,0 +1,307 @@
+{% extends "base.html" %}
+
+{% block title %}FitPlan - Recipe{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+<style>
+    .recipe-container {
+        padding: 0;
+    }
+    
+    .recipe-header {
+        text-align: center;
+        margin-bottom: 20px;
+        padding-bottom: 15px;
+        border-bottom: 2px solid #e1e8ed;
+    }
+    
+    .recipe-title {
+        font-size: 18px;
+        font-weight: bold;
+        color: #333;
+        margin-bottom: 8px;
+    }
+    
+    .recipe-meta {
+        display: flex;
+        justify-content: center;
+        gap: 15px;
+        font-size: 12px;
+        color: #666;
+    }
+    
+    .recipe-meta-item {
+        background: #f8f9ff;
+        padding: 4px 10px;
+        border-radius: 12px;
+    }
+    
+    .section-title {
+        font-size: 16px;
+        font-weight: bold;
+        color: #333;
+        margin: 20px 0 12px 0;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    
+    .ingredients-table {
+        width: 100%;
+        margin-bottom: 20px;
+    }
+    
+    .ingredient-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 10px 12px;
+        background: #f8f9ff;
+        border-radius: 8px;
+        margin-bottom: 6px;
+        font-size: 13px;
+    }
+    
+    .ingredient-name {
+        flex: 1;
+        color: #333;
+        font-weight: 500;
+    }
+    
+    .ingredient-amount {
+        color: #667eea;
+        font-weight: 600;
+        white-space: nowrap;
+        margin-left: 10px;
+    }
+    
+    .instructions-list {
+        list-style: none;
+        counter-reset: step-counter;
+        padding: 0;
+    }
+    
+    .instruction-step {
+        counter-increment: step-counter;
+        position: relative;
+        padding: 12px 12px 12px 45px;
+        margin-bottom: 10px;
+        background: #f8fff8;
+        border-radius: 8px;
+        font-size: 13px;
+        line-height: 1.5;
+        color: #333;
+    }
+    
+    .instruction-step::before {
+        content: counter(step-counter);
+        position: absolute;
+        left: 12px;
+        top: 12px;
+        width: 24px;
+        height: 24px;
+        background: #52c41a;
+        color: white;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: bold;
+        font-size: 12px;
+    }
+    
+    .macros-display {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 8px;
+        margin-bottom: 20px;
+    }
+    
+    .macro-box {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 10px;
+        border-radius: 8px;
+        text-align: center;
+    }
+    
+    .macro-label {
+        font-size: 10px;
+        opacity: 0.9;
+        margin-bottom: 4px;
+    }
+    
+    .macro-value {
+        font-size: 16px;
+        font-weight: bold;
+    }
+    
+    .no-recipe {
+        text-align: center;
+        padding: 40px 20px;
+        color: #666;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="phone-frame">
+    <div class="plan-header">
+        <div class="app-logo">👨‍🍳</div>
+        <div class="app-name">Recipe</div>
+    </div>
+    
+    <div class="scrollable-content recipe-container" id="recipeContainer">
+        <!-- Recipe content will be populated by JavaScript -->
+        <div class="no-recipe">
+            <p>Loading recipe...</p>
+        </div>
+    </div>
+    
+    <div class="navigation">
+        <a href="{{ url_for('meals_page') }}">
+            <button class="btn-secondary">← Back to Meals</button>
+        </a>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    loadRecipe();
+});
+
+function loadRecipe() {
+    // Get recipe data from sessionStorage
+    const recipeDataStr = sessionStorage.getItem('currentRecipe');
+    
+    if (!recipeDataStr) {
+        showError('No recipe data found');
+        return;
+    }
+    
+    try {
+        const recipe = JSON.parse(recipeDataStr);
+        displayRecipe(recipe);
+    } catch (e) {
+        showError('Error loading recipe');
+        console.error(e);
+    }
+}
+
+function displayRecipe(recipe) {
+    const container = document.getElementById('recipeContainer');
+    
+    // Parse instructions (split by newlines)
+    let instructions = [];
+    if (recipe.instructions) {
+        instructions = recipe.instructions
+            .split('\n')
+            .map(s => s.trim())
+            .filter(s => s.length > 0);
+    }
+    
+    // Build ingredients list
+    let ingredientsHTML = '';
+    if (recipe.ingredients && recipe.ingredients.length > 0) {
+        for (let i = 0; i < recipe.ingredients.length; i++) {
+            const name = recipe.ingredients[i];
+            const qty = recipe.quantities && recipe.quantities[i] ? recipe.quantities[i] : '';
+            const unit = recipe.units && recipe.units[i] ? recipe.units[i] : '';
+            const amount = qty && unit ? `${qty} ${unit}` : (qty || unit || '');
+            
+            ingredientsHTML += `
+                <div class="ingredient-row">
+                    <div class="ingredient-name">${escapeHtml(name)}</div>
+                    <div class="ingredient-amount">${escapeHtml(amount)}</div>
+                </div>
+            `;
+        }
+    }
+    
+    // Build instructions list
+    let instructionsHTML = '';
+    if (instructions.length > 0) {
+        instructions.forEach(instruction => {
+            instructionsHTML += `<li class="instruction-step">${escapeHtml(instruction)}</li>`;
+        });
+    } else {
+        instructionsHTML = '<li class="instruction-step">No instructions available</li>';
+    }
+    
+    // Build macros display
+    let macrosHTML = '';
+    if (recipe.macros) {
+        macrosHTML = `
+            <div class="macros-display">
+                <div class="macro-box">
+                    <div class="macro-label">Protein</div>
+                    <div class="macro-value">${recipe.macros.protein || 'N/A'}</div>
+                </div>
+                <div class="macro-box">
+                    <div class="macro-label">Carbs</div>
+                    <div class="macro-value">${recipe.macros.carbs || 'N/A'}</div>
+                </div>
+                <div class="macro-box">
+                    <div class="macro-label">Fat</div>
+                    <div class="macro-value">${recipe.macros.fat || 'N/A'}</div>
+                </div>
+            </div>
+        `;
+    }
+    
+    // Render complete recipe
+    container.innerHTML = `
+        <div class="recipe-header">
+            <div class="recipe-title">${escapeHtml(recipe.title || 'Untitled Recipe')}</div>
+            <div class="recipe-meta">
+                <span class="recipe-meta-item">🔥 ${recipe.calories || 0} cal</span>
+                ${recipe.meal_type ? `<span class="recipe-meta-item">🍽️ ${capitalizeFirst(recipe.meal_type)}</span>` : ''}
+            </div>
+        </div>
+        
+        ${recipe.description ? `<p style="text-align: center; color: #666; font-size: 13px; margin-bottom: 20px;">${escapeHtml(recipe.description)}</p>` : ''}
+        
+        ${macrosHTML}
+        
+        <div class="section-title">
+            <span>🛒</span>
+            <span>Ingredients</span>
+        </div>
+        <div class="ingredients-table">
+            ${ingredientsHTML || '<p style="color: #999; text-align: center;">No ingredients listed</p>'}
+        </div>
+        
+        <div class="section-title">
+            <span>📝</span>
+            <span>Instructions</span>
+        </div>
+        <ol class="instructions-list">
+            ${instructionsHTML}
+        </ol>
+    `;
+}
+
+function showError(message) {
+    const container = document.getElementById('recipeContainer');
+    container.innerHTML = `
+        <div class="no-recipe">
+            <p>${escapeHtml(message)}</p>
+            <p style="margin-top: 10px;">
+                <a href="/meals" style="color: #667eea; text-decoration: none;">← Return to Meals</a>
+            </p>
+        </div>
+    `;
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function capitalizeFirst(str) {
+    return str.charAt(0).toUpperCase() + str.slice(1);
+}
+</script>
+{% endblock %}
