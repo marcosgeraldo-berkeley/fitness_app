@@ -20,8 +20,8 @@ class MealPlanningAPI:
     
     def __init__(self):
         self.base_url = os.environ.get(
-            'MEAL_API_URL', 
-            'http://localhost:8080'
+            'RECIPE_API_BASE', 
+            'https://cqztaifwfa.us-east-1.awsapprunner.com/' # production API as backup
         )
         self.timeout = 30  # API developer specified 30 seconds
     
