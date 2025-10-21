@@ -86,8 +86,8 @@
             </p>
         </div>
         
-        <form method="POST" action="{{ url_for('create_plan') }}">
-            <button type="submit" class="btn-primary" style="width: 100%;">Create My Plan</button>
+        <form method="POST" action="{{ url_for('create_plan') }}"  id="createPlanForm">
+            <button type="submit" class="btn-primary btn-create-plan" style="width: 100%;">Create My Plan</button>
         </form>
     </div>
     
@@ -97,4 +97,7 @@
         </a>
     </div>
 </div>
+{% endblock %}
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/forms.js') }}"></script>
 {% endblock %}

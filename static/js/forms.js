@@ -7,6 +7,7 @@ document.addEventListener('DOMContentLoaded', function() {
     initializeMultiSelect();
     initializeFormValidation();
     initializeProgressSaving();
+    initializeCreatePlanButton(); // ADD THIS LINE
 });
 
 // Validate height inputs
@@ -349,11 +350,53 @@ function debounce(func, wait) {
         timeout = setTimeout(later, wait);
     };
 }
+// Create Plan Button Loading State
+function initializeCreatePlanButton() {
+    const createPlanForm = document.getElementById('createPlanForm');
+    const createPlanButton = document.querySelector('.btn-create-plan');
+    
+    if (createPlanForm && createPlanButton) {
+        createPlanForm.addEventListener('submit', function(e) {
+            // Don't prevent default - let form submit
+            // Just add loading state to button
+            setCreatePlanLoading(createPlanButton, true);
+        });
+    }
+}
 
+function setCreatePlanLoading(button, isLoading) {
+    if (isLoading) {
+        // Store original text
+        button.dataset.originalText = button.textContent;
+        
+        // Add loading class
+        button.classList.add('loading');
+        button.disabled = true;
+        
+        // Change button content with spinner
+        button.innerHTML = '<span class="btn-spinner"></span>Creating Plan...';
+        // Prevent any future clicks or state changes
+        button.style.pointerEvents = 'none';
+
+    } else {
+        // Remove loading class
+        button.classList.remove('loading');
+        button.disabled = false;
+        button.style.pointerEvents = '';
+        // Restore original text
+        button.textContent = button.dataset.originalText || 'Create My Plan';
+    }
+}
+
+// Export for use in other contexts if needed
+window.FitPlanButtons = window.FitPlanButtons || {};
+window.FitPlanButtons.setCreatePlanLoading = setCreatePlanLoading;
 // Form submission with loading states
 document.addEventListener('submit', function(e) {
     const submitBtn = e.target.querySelector('button[type="submit"], .btn-next');
-    if (submitBtn && window.FitPlan) {
+    
+    // Skip if this is the create plan button (it has its own handler)
+    if (submitBtn && !submitBtn.classList.contains('btn-create-plan') && window.FitPlan) {
         window.FitPlan.setButtonLoading(submitBtn, true);
         
         // Reset loading state if form validation fails

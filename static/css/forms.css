@@ -261,6 +261,42 @@
     display: block;
 }
 
+/* Button Loading States - Create Plan Button */
+.btn-create-plan {
+    position: relative;
+    transition: all 0.3s ease;
+}
+
+.btn-create-plan.loading {
+    opacity: 0.8;
+    cursor: wait;
+    pointer-events: none;
+}
+
+.btn-create-plan .btn-spinner {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-radius: 50%;
+    border-top-color: white;
+    animation: btn-spin 0.8s linear infinite;
+    margin-right: 8px;
+    vertical-align: middle;
+}
+
+@keyframes btn-spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Ensure text stays aligned when spinner appears */
+.btn-create-plan.loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
 /* Loading states */
 .btn-primary:disabled,
 .btn-next:disabled {
