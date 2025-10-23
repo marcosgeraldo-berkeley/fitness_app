@@ -23,3 +23,6 @@ wheel==0.45.1
 zipp==3.23.0
 gunicorn
 requests
+# PostgreSQL support
+psycopg2-binary==2.9.9
+SQLAlchemy==2.0.23

@@ -852,7 +852,8 @@ def create_plan():
             raw_meal_plan = meal_api.generate_meal_plan(
                 target_calories=int(user['caloric_target'] or 2000),
                 dietary=dietary,
-                preferences=", ".join(dietary) if dietary else "",
+                preferences="",
+                exclusions= "",
                 num_days=7,
                 limit_per_meal=1
             )
