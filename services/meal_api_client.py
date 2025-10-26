@@ -23,11 +23,14 @@ class MealPlanningAPI:
             'RECIPE_API_BASE', 
             'https://cqztaifwfa.us-east-1.awsapprunner.com/' # production API as backup
         )
-        self.timeout = 30  # API developer specified 30 seconds
+        self.timeout = 120  # API developer specified 120 seconds
     
     def generate_meal_plan(
         self,
         target_calories: int,
+        target_protein: int = 150,
+        target_fat: int = 70,
+        target_carbs: int = 200,
         dietary: List[str] = None,
         exclusions: str = "",
         preferences: str = "",
@@ -67,6 +70,9 @@ class MealPlanningAPI:
         # Prepare request payload
         payload = {
             "target_calories": target_calories,
+            "target_protein": target_protein,
+            "target_fat": target_fat,
+            "target_carbs": target_carbs,
             "dietary": dietary or [],
             "exclusions": exclusions,
             "preferences": preferences,

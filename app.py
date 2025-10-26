@@ -847,13 +847,19 @@ def create_plan():
                     dietary = [r.strip().lower() for r in restrictions if r.strip()]
                 except (json.JSONDecodeError, TypeError):
                     dietary = []
+
+            # log all user info from the database
+            # logger.info(f"User data for meal plan generation: {dict(user)}")
             
             # Call meal planning API
             raw_meal_plan = meal_api.generate_meal_plan(
                 target_calories=int(user['caloric_target'] or 2000),
+                target_protein=int(user['protein_target_g'] or 150),
+                target_carbs=int(user['carbs_target_g'] or 200),
+                target_fat=int(user['fat_target_g'] or 70),
                 dietary=dietary,
-                preferences="",
-                exclusions= "",
+                preferences="balanced meals",
+                exclusions= "none",
                 num_days=7,
                 limit_per_meal=1
             )
