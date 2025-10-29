@@ -20,10 +20,14 @@ class MealPlanningAPI:
     
     def __init__(self):
         self.base_url = os.environ.get(
-            'RECIPE_API_BASE', 
+            'MEAL_API_URL', 
             'https://cqztaifwfa.us-east-1.awsapprunner.com/' # production API as backup
         )
+<<<<<<< HEAD
         self.timeout = 120  # API developer specified 120 seconds
+=======
+        self.timeout = 60  # API developer specified 30 seconds
+>>>>>>> 0ec3548 (Stable version before changes in UI flow)
     
     def generate_meal_plan(
         self,
@@ -178,7 +182,7 @@ class MealPlanningAPI:
         
         for day_plan in meal_plan['daily_plans']:
             day_data = {
-                'day_number': day_plan['day'] + 1,  # Make 1-indexed for display
+                'day_number': day_plan['day'] ,  # Make 1-indexed for display -> the API returns numbers form 1 to 7
                 'target_calories': day_plan['target_calories'],
                 'actual_calories': day_plan['total_calories'],
                 'meals': []

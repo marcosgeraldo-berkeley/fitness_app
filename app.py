@@ -1,21 +1,42 @@
-from flask import Flask, render_template, request, redirect, url_for, session, jsonify, flash, make_response
-import sqlite3
+"""
+app.py: Flask application to control the flow of the front end.
+UPDATED FOR POSTGRESQL
+"""
+import os
+import logging
 import hashlib
 import json
-import os
 from datetime import datetime, timedelta
 from services.meal_api_client import MealPlanningAPI, MealPlanningAPIError
-import logging
+from flask import Flask, render_template, request, redirect, url_for, session, jsonify, flash, make_response
+
+# PostgreSQL imports
+from database import get_db, close_db, init_db
+from sqlalchemy import text
+from dotenv import load_dotenv
+from decimal import Decimal
+
+# Load environment variables FIRST
+load_dotenv()
 
 app = Flask(__name__)
-app.secret_key = 'your-secret-key-here'  # Change this in production
+app.secret_key = os.environ.get('SECRET_KEY', 'your-secret-key-here')  # Use env var in production
+
+# ====================HELPER TO HANDLE SERIAL DECIMALS IN POSTGRES ====
+
+class DecimalEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, Decimal):
+            return float(obj)
+        return super(DecimalEncoder, self).default(obj)
 
 # ====================INITIALIZE WORKOUT GENERATOR ====================
 from workout_generator import WorkoutGenerator
-workout_generator = WorkoutGenerator(fitplan_db='fitplan.db', exercise_db='exercises.db')
+# NOTE: exercises.db stays as SQLite (read-only reference database)
+# Only fitplan user data moves to PostgreSQL
+workout_generator = WorkoutGenerator(exercise_db='exercises.db')
 
 # ==================== METABOLIC CALCULATION FUNCTIONS ====================
-
 def inches_to_cm(inches):
     """Convert inches to centimeters"""
     return round(inches * 2.54, 2)
@@ -117,48 +138,65 @@ def calculate_macros(caloric_target, fitness_goal):
 
 def recalculate_nutrition_targets(user_id):
     """Recalculate all nutrition targets for a user"""
-    conn = get_db_connection()
-    user = conn.execute('SELECT * FROM users WHERE id = ?', (user_id,)).fetchone()
-    
-    if not user:
-        conn.close()
-        return
-    
-    # Convert height to cm if stored as string (e.g., "5'10" or "178 cm")
-    height_cm = parse_height_to_cm(user['height'])
-    weight_kg = float(user['weight']) * 0.453592  # Convert lbs to kg
-    
-    # Calculate BMR
-    bmr = calculate_bmr(user)
-    
-    # Calculate TDEE (only if activity level is set)
-    tdee = calculate_tdee(bmr, user['activity_level']) if user['activity_level'] else bmr
-    
-    # Calculate caloric target (only if fitness goal is set)
-    caloric_target = calculate_caloric_target(tdee, user['fitness_goals']) if user['fitness_goals'] else tdee
-    
-    # Calculate macros
-    macros = calculate_macros(caloric_target, user['fitness_goals']) if user['fitness_goals'] else {'protein_g': 0, 'carbs_g': 0, 'fat_g': 0}
-    
-    # Update database
-    conn.execute('''
-        UPDATE users 
-        SET bmr = ?, tdee = ?, caloric_target = ?, 
-            protein_target_g = ?, carbs_target_g = ?, fat_target_g = ?
-        WHERE id = ?
-    ''', (bmr, tdee, caloric_target, 
-          macros['protein_g'], macros['carbs_g'], macros['fat_g'], 
-          user_id))
-    
-    conn.commit()
-    conn.close()
-    
-    return {
-        'bmr': bmr,
-        'tdee': tdee,
-        'caloric_target': caloric_target,
-        'macros': macros
-    }
+    db = get_db()
+    try:
+        # Get user data
+        result = db.execute(text('SELECT * FROM users WHERE id = :id'), {'id': user_id})
+        user = result.fetchone()
+        
+        if not user:
+            return
+        
+        # Convert to dict for easier access
+        user_dict = dict(user._mapping)
+        
+        # Convert height to cm if stored as string (e.g., "5'10" or "178 cm")
+        height_cm = parse_height_to_cm(user_dict['height'])
+        weight_kg = float(user_dict['weight']) * 0.453592  # Convert lbs to kg
+        
+        # Calculate BMR
+        bmr = calculate_bmr(user_dict)
+        
+        # Calculate TDEE (only if activity level is set)
+        tdee = calculate_tdee(bmr, user_dict['activity_level']) if user_dict['activity_level'] else bmr
+        
+        # Calculate caloric target (only if fitness goal is set)
+        caloric_target = calculate_caloric_target(tdee, user_dict['fitness_goals']) if user_dict['fitness_goals'] else tdee
+        
+        # Calculate macros
+        macros = calculate_macros(caloric_target, user_dict['fitness_goals']) if user_dict['fitness_goals'] else {'protein_g': 0, 'carbs_g': 0, 'fat_g': 0}
+        
+        # Update database
+        db.execute(text('''
+            UPDATE users 
+            SET bmr = :bmr, tdee = :tdee, caloric_target = :caloric_target, 
+                protein_target_g = :protein_g, carbs_target_g = :carbs_g, fat_target_g = :fat_g
+            WHERE id = :id
+        '''), {
+            'bmr': bmr, 
+            'tdee': tdee, 
+            'caloric_target': caloric_target,
+            'protein_g': macros['protein_g'], 
+            'carbs_g': macros['carbs_g'], 
+            'fat_g': macros['fat_g'],
+            'id': user_id
+        })
+        
+        db.commit()
+        
+        return {
+            'bmr': bmr,
+            'tdee': tdee,
+            'caloric_target': caloric_target,
+            'macros': macros
+        }
+        
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error recalculating nutrition targets: {e}")
+        raise
+    finally:
+        close_db()
 
 def parse_height_to_cm(height_str):
     """Parse height string to centimeters"""
@@ -237,9 +275,9 @@ def generate_grocery_list_from_meals(meal_plan):
     
     # Organize into sections (simple categorization)
     produce_keywords = ['lettuce', 'tomato', 'cucumber', 'onion', 'pepper', 'carrot', 
-                       'broccoli', 'spinach', 'kale', 'apple', 'banana', 'berry']
+                        'broccoli', 'spinach', 'kale', 'apple', 'banana', 'berry']
     protein_keywords = ['chicken', 'beef', 'pork', 'fish', 'salmon', 'tuna', 
-                       'turkey', 'egg', 'tofu', 'tempeh']
+                        'turkey', 'egg', 'tofu', 'tempeh']
     dairy_keywords = ['milk', 'cheese', 'yogurt', 'butter', 'cream']
     
     produce_items = []
@@ -328,8 +366,7 @@ def transform_meal_plan_for_templates(raw_meal_plan):
                 }
             }
     """
-    from datetime import datetime, timedelta
-    
+        
     if not raw_meal_plan or 'daily_plans' not in raw_meal_plan:
         return None
     
@@ -474,79 +511,6 @@ def get_sample_grocery_data():
     }
 
 
-# ==================== DATABASE SETUP ====================
-
-def init_db():
-    conn = sqlite3.connect('fitplan.db')
-    c = conn.cursor()
-    
-    # Users table
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL,
-            email TEXT UNIQUE NOT NULL,
-            password TEXT NOT NULL,
-            age INTEGER,
-            gender TEXT,
-            weight REAL,
-            height REAL,
-            activity_level TEXT,
-            fitness_goals TEXT,
-            workout_schedule INTEGER,
-            dietary_restrictions TEXT,
-            physical_limitations TEXT,
-            available_equipment TEXT,
-            bmr REAL,
-            tdee REAL,
-            caloric_target REAL,
-            protein_target_g REAL,
-            carbs_target_g REAL,
-            fat_target_g REAL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    ''')
-    
-    # Meal plans table
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS meal_plans (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER,
-            week_date TEXT,
-            plan_data TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (user_id) REFERENCES users (id)
-        )
-    ''')
-    
-    # Workout plans table
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS workout_plans (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER,
-            week_date TEXT,
-            plan_data TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (user_id) REFERENCES users (id)
-        )
-    ''')
-
-    # Grocery data table
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS grocery_lists (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER,
-            week_date TEXT,
-            grocery_data TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (user_id) REFERENCES users (id)
-        )
-    ''')
-
-    conn.commit()
-    conn.close()
-
-
 # ==================== TEMPLATE FILTERS ====================
 
 @app.template_filter('fromjson')
@@ -562,11 +526,6 @@ def fromjson_filter(value):
 
 def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
-
-def get_db_connection():
-    conn = sqlite3.connect('fitplan.db')
-    conn.row_factory = sqlite3.Row
-    return conn
 
 # ==================== ROUTES ====================
 
@@ -589,40 +548,48 @@ def register():
         flash('Passwords do not match')
         return redirect(url_for('signup'))
     
-    conn = get_db_connection()
+    db = get_db()
     try:
-        conn.execute('INSERT INTO users (name, email, password) VALUES (?, ?, ?)',
-                    (name, email, hash_password(password)))
-        conn.commit()
+        db.execute(text('INSERT INTO users (name, email, password) VALUES (:name, :email, :password)'),
+                    {'name': name, 'email': email, 'password': hash_password(password)})
+        db.commit()
         
-        user = conn.execute('SELECT * FROM users WHERE email = ?', (email,)).fetchone()
-        session['user_id'] = user['id']
-        session['user_name'] = user['name']
+        result = db.execute(text('SELECT * FROM users WHERE email = :email'), {'email': email})
+        user = result.fetchone()
+        session['user_id'] = user.id
+        session['user_name'] = user.name
         
-        conn.close()
         return redirect(url_for('questionnaire_intro'))
-    except sqlite3.IntegrityError:
-        flash('Email already exists')
-        conn.close()
+    except Exception as e:
+        db.rollback()
+        if 'unique' in str(e).lower() or 'duplicate' in str(e).lower():
+            flash('Email already exists')
+        else:
+            flash('Registration error')
         return redirect(url_for('signup'))
+    finally:
+        close_db()
 
 @app.route('/login', methods=['POST'])
 def login():
     email = request.form['email']
     password = request.form['password']
     
-    conn = get_db_connection()
-    user = conn.execute('SELECT * FROM users WHERE email = ? AND password = ?',
-                       (email, hash_password(password))).fetchone()
-    conn.close()
-    
-    if user:
-        session['user_id'] = user['id']
-        session['user_name'] = user['name']
-        return redirect(url_for('dashboard'))
-    else:
-        flash('Invalid email or password')
-        return redirect(url_for('index'))
+    db = get_db()
+    try:
+        result = db.execute(text('SELECT * FROM users WHERE email = :email AND password = :password'),
+                           {'email': email, 'password': hash_password(password)})
+        user = result.fetchone()
+        
+        if user:
+            session['user_id'] = user.id
+            session['user_name'] = user.name
+            return redirect(url_for('dashboard'))
+        else:
+            flash('Invalid email or password')
+            return redirect(url_for('index'))
+    finally:
+        close_db()
 
 @app.route('/questionnaire-intro')
 def questionnaire_intro():
@@ -648,16 +615,23 @@ def save_basic_info():
     total_height_inches = (height_feet * 12) + height_inches
     weight_lbs = float(request.form['weight_lbs'])
     
-    conn = get_db_connection()
-    conn.execute('UPDATE users SET gender = ?, age = ?, height = ?, weight = ? WHERE id = ?',
-                (gender, age, total_height_inches, weight_lbs, session['user_id']))
-    conn.commit()
-    conn.close()
-    
-    # Recalculate after basic info update
-    recalculate_nutrition_targets(session['user_id'])
-    
-    return redirect(url_for('activity_level'))
+    db = get_db()
+    try:
+        db.execute(text('UPDATE users SET gender = :gender, age = :age, height = :height, weight = :weight WHERE id = :id'),
+                    {'gender': gender, 'age': age, 'height': total_height_inches, 'weight': weight_lbs, 'id': session['user_id']})
+        db.commit()
+        
+        # Recalculate after basic info update
+        recalculate_nutrition_targets(session['user_id'])
+        
+        return redirect(url_for('activity_level'))
+    except Exception as e:
+        db.rollback()
+        flash('Error saving basic info')
+        logger.error(f"Error saving basic info: {e}")
+        return redirect(url_for('basic_info'))
+    finally:
+        close_db()
 
 @app.route('/activity-level')
 def activity_level():
@@ -672,16 +646,23 @@ def save_activity_level():
     
     activity = request.form['activity_level']
     
-    conn = get_db_connection()
-    conn.execute('UPDATE users SET activity_level = ? WHERE id = ?',
-                (activity, session['user_id']))
-    conn.commit()
-    conn.close()
-    
-    # Recalculate after activity level update
-    recalculate_nutrition_targets(session['user_id'])
-    
-    return redirect(url_for('fitness_goals'))
+    db = get_db()
+    try:
+        db.execute(text('UPDATE users SET activity_level = :activity WHERE id = :id'),
+                    {'activity': activity, 'id': session['user_id']})
+        db.commit()
+        
+        # Recalculate after activity level update
+        recalculate_nutrition_targets(session['user_id'])
+        
+        return redirect(url_for('fitness_goals'))
+    except Exception as e:
+        db.rollback()
+        flash('Error saving activity level')
+        logger.error(f"Error saving activity level: {e}")
+        return redirect(url_for('activity_level'))
+    finally:
+        close_db()
 
 @app.route('/fitness-goals')
 def fitness_goals():
@@ -696,16 +677,23 @@ def save_fitness_goals():
     
     goals = request.form['fitness_goal']
     
-    conn = get_db_connection()
-    conn.execute('UPDATE users SET fitness_goals = ? WHERE id = ?',
-                (goals, session['user_id']))
-    conn.commit()
-    conn.close()
-    
-    # Recalculate after fitness goals update
-    recalculate_nutrition_targets(session['user_id'])
-    
-    return redirect(url_for('workout_schedule'))
+    db = get_db()
+    try:
+        db.execute(text('UPDATE users SET fitness_goals = :goals WHERE id = :id'),
+                    {'goals': goals, 'id': session['user_id']})
+        db.commit()
+        
+        # Recalculate after fitness goals update
+        recalculate_nutrition_targets(session['user_id'])
+        
+        return redirect(url_for('workout_schedule'))
+    except Exception as e:
+        db.rollback()
+        flash('Error saving fitness goals')
+        logger.error(f"Error saving fitness goals: {e}")
+        return redirect(url_for('fitness_goals'))
+    finally:
+        close_db()
 
 @app.route('/workout-schedule')
 def workout_schedule():
@@ -720,13 +708,20 @@ def save_workout_schedule():
     
     schedule = request.form['workout_schedule']
     
-    conn = get_db_connection()
-    conn.execute('UPDATE users SET workout_schedule = ? WHERE id = ?',
-                (schedule, session['user_id']))
-    conn.commit()
-    conn.close()
-    
-    return redirect(url_for('dietary_restrictions'))
+    db = get_db()
+    try:
+        db.execute(text('UPDATE users SET workout_schedule = :schedule WHERE id = :id'),
+                    {'schedule': schedule, 'id': session['user_id']})
+        db.commit()
+        
+        return redirect(url_for('dietary_restrictions'))
+    except Exception as e:
+        db.rollback()
+        flash('Error saving workout schedule')
+        logger.error(f"Error saving workout schedule: {e}")
+        return redirect(url_for('workout_schedule'))
+    finally:
+        close_db()
 
 @app.route('/dietary-restrictions')
 def dietary_restrictions():
@@ -742,13 +737,20 @@ def save_dietary_restrictions():
     restrictions = request.form.getlist('dietary_restrictions')
     restrictions_json = json.dumps(restrictions)
     
-    conn = get_db_connection()
-    conn.execute('UPDATE users SET dietary_restrictions = ? WHERE id = ?',
-                (restrictions_json, session['user_id']))
-    conn.commit()
-    conn.close()
-    
-    return redirect(url_for('physical_limitations'))
+    db = get_db()
+    try:
+        db.execute(text('UPDATE users SET dietary_restrictions = :restrictions WHERE id = :id'),
+                    {'restrictions': restrictions_json, 'id': session['user_id']})
+        db.commit()
+        
+        return redirect(url_for('physical_limitations'))
+    except Exception as e:
+        db.rollback()
+        flash('Error saving dietary restrictions')
+        logger.error(f"Error saving dietary restrictions: {e}")
+        return redirect(url_for('dietary_restrictions'))
+    finally:
+        close_db()
 
 @app.route('/physical-limitations')
 def physical_limitations():
@@ -764,13 +766,20 @@ def save_physical_limitations():
     limitations = request.form.getlist('physical_limitations')
     limitations_json = json.dumps(limitations)
     
-    conn = get_db_connection()
-    conn.execute('UPDATE users SET physical_limitations = ? WHERE id = ?',
-                (limitations_json, session['user_id']))
-    conn.commit()
-    conn.close()
-    
-    return redirect(url_for('equipment_access'))
+    db = get_db()
+    try:
+        db.execute(text('UPDATE users SET physical_limitations = :limitations WHERE id = :id'),
+                    {'limitations': limitations_json, 'id': session['user_id']})
+        db.commit()
+        
+        return redirect(url_for('equipment_access'))
+    except Exception as e:
+        db.rollback()
+        flash('Error saving physical limitations')
+        logger.error(f"Error saving physical limitations: {e}")
+        return redirect(url_for('physical_limitations'))
+    finally:
+        close_db()
 
 @app.route('/equipment-access')
 def equipment_access():
@@ -786,34 +795,45 @@ def save_equipment_access():
     equipment = request.form.getlist('equipment')
     equipment_json = json.dumps(equipment)
     
-    conn = get_db_connection()
-    conn.execute('UPDATE users SET available_equipment = ? WHERE id = ?',
-                (equipment_json, session['user_id']))
-    conn.commit()
-    conn.close()
-    
-    return redirect(url_for('profile_summary'))
+    db = get_db()
+    try:
+        db.execute(text('UPDATE users SET available_equipment = :equipment WHERE id = :id'),
+                    {'equipment': equipment_json, 'id': session['user_id']})
+        db.commit()
+        
+        return redirect(url_for('profile_summary'))
+    except Exception as e:
+        db.rollback()
+        flash('Error saving equipment access')
+        logger.error(f"Error saving equipment access: {e}")
+        return redirect(url_for('equipment_access'))
+    finally:
+        close_db()
 
 @app.route('/profile_summary')
 def profile_summary():
     if 'user_id' not in session:
         return redirect(url_for('index'))
     
-    conn = get_db_connection()
-    user = conn.execute('SELECT * FROM users WHERE id = ?', 
-                       (session['user_id'],)).fetchone()
-    conn.close()
+    db = get_db()
+    try:
+        result = db.execute(text('SELECT * FROM users WHERE id = :id'), 
+                           {'id': session['user_id']})
+        user = result.fetchone()
+        
         # Convert for display
-    feet, inches = inches_to_feet_inches(user['height'])
-    
-    user_display = {
-        **dict(user),
-        'height_feet': feet,
-        'height_inches': inches,
-        'weight_display': f"{user['weight']} lbs"
-    }
-    
-    return render_template('profile_summary.html', user=user_display)
+        feet, inches = inches_to_feet_inches(user.height)
+        
+        user_display = {
+            **dict(user._mapping),
+            'height_feet': feet,
+            'height_inches': inches,
+            'weight_display': f"{user.weight} lbs"
+        }
+        
+        return render_template('profile_summary.html', user=user_display)
+    finally:
+        close_db()
 
 @app.route('/create-plan', methods=['POST'])
 def create_plan():
@@ -824,10 +844,12 @@ def create_plan():
     user_id = session['user_id']
     week_date = datetime.now().strftime('%Y-%m-%d')
     
+    db = get_db()
     try:
         # Get user data
-        conn = get_db_connection()
-        user = conn.execute('SELECT * FROM users WHERE id = ?', (user_id,)).fetchone()
+        result = db.execute(text('SELECT * FROM users WHERE id = :id'), {'id': user_id})
+        user = result.fetchone()
+        user_dict = dict(user._mapping)
         
         # ============ GENERATE WORKOUT PLAN ============
         logger.info(f"Generating workout plan for user {user_id}")
@@ -841,9 +863,9 @@ def create_plan():
         try:
             # Parse dietary restrictions
             dietary = []
-            if user['dietary_restrictions']:
+            if user_dict['dietary_restrictions']:
                 try:
-                    restrictions = json.loads(user['dietary_restrictions'])
+                    restrictions = json.loads(user_dict['dietary_restrictions'])
                     dietary = [r.strip().lower() for r in restrictions if r.strip()]
                 except (json.JSONDecodeError, TypeError):
                     dietary = []
@@ -853,6 +875,7 @@ def create_plan():
             
             # Call meal planning API
             raw_meal_plan = meal_api.generate_meal_plan(
+<<<<<<< HEAD
                 target_calories=int(user['caloric_target'] or 2000),
                 target_protein=int(user['protein_target_g'] or 150),
                 target_carbs=int(user['carbs_target_g'] or 200),
@@ -860,9 +883,21 @@ def create_plan():
                 dietary=dietary,
                 preferences="balanced meals",
                 exclusions= "none",
+=======
+                target_calories=int(user_dict['caloric_target'] or 2000),
+                dietary=dietary,
+                preferences="",
+                exclusions="",
+>>>>>>> 0ec3548 (Stable version before changes in UI flow)
                 num_days=7,
                 limit_per_meal=1
             )
+            ### debugging 
+            try:
+                logger.info(f"Meal Raw data: {[x['day'] for x in raw_meal_plan['daily_plans']]}")
+            except:
+                logger.info(f"Meal Raw data: {raw_meal_plan}")
+            ### end debugging
             
             if raw_meal_plan:
                 logger.info(f"✓ Successfully generated meal plan for user {user_id}")
@@ -872,12 +907,19 @@ def create_plan():
                 grocery_data = generate_grocery_list_from_meals(raw_meal_plan)
             else:
                 logger.warning(f"Meal API returned None, using fallback for user {user_id}")
-                meal_data = get_sample_meal_data(user)
+                meal_data = get_sample_meal_data(user_dict)
                 grocery_data = get_sample_grocery_data()
+                
+            ### debugging 
+            try:
+                logger.info(f"Meal Raw data: {[x['day_number'] for x in meal_data['days']]}")
+            except:
+                logger.info(f"Meal Raw data: {meal_data}")
+            ### end debugging    
         
         except MealPlanningAPIError as e:
             logger.error(f"Meal API validation error: {str(e)}")
-            meal_data = get_sample_meal_data(user)
+            meal_data = get_sample_meal_data(user_dict)
             grocery_data = get_sample_grocery_data()
             flash('Using sample meal plan - meal service unavailable', 'warning')
         
@@ -885,36 +927,38 @@ def create_plan():
             logger.error(f"Error generating meal plan: {str(e)}")
             import traceback
             traceback.print_exc()
-            meal_data = get_sample_meal_data(user)
+            meal_data = get_sample_meal_data(user_dict)
             grocery_data = get_sample_grocery_data()
             flash('Using sample meal plan - error occurred', 'warning')
         
         # ============ SAVE EVERYTHING TO DATABASE ============
         
         # Save workout plan
-        conn.execute('INSERT INTO workout_plans (user_id, week_date, plan_data) VALUES (?, ?, ?)',
-                    (user_id, week_date, json.dumps(workout_data)))
+        db.execute(text('INSERT INTO workout_plans (user_id, week_date, plan_data) VALUES (:user_id, :week_date, :plan_data)'),
+                    {'user_id': user_id, 'week_date': week_date, 'plan_data': json.dumps(workout_data,cls=DecimalEncoder)})
         
         # Save meal plan
-        conn.execute('INSERT INTO meal_plans (user_id, week_date, plan_data) VALUES (?, ?, ?)',
-                    (user_id, week_date, json.dumps(meal_data)))
+        db.execute(text('INSERT INTO meal_plans (user_id, week_date, plan_data) VALUES (:user_id, :week_date, :plan_data)'),
+                    {'user_id': user_id, 'week_date': week_date, 'plan_data': json.dumps(meal_data,cls=DecimalEncoder)})
         
         # Save grocery list
-        conn.execute('INSERT INTO grocery_lists (user_id, week_date, grocery_data) VALUES (?, ?, ?)',
-                    (user_id, week_date, json.dumps(grocery_data)))
+        db.execute(text('INSERT INTO grocery_lists (user_id, week_date, grocery_data) VALUES (:user_id, :week_date, :grocery_data)'),
+                    {'user_id': user_id, 'week_date': week_date, 'grocery_data': json.dumps(grocery_data,cls=DecimalEncoder)})
         
-        conn.commit()
-        conn.close()
+        db.commit()
         
         flash('Your personalized plans have been created!', 'success')
         return redirect(url_for('dashboard'))
         
     except Exception as e:
+        db.rollback()
         logger.error(f"Error in create_plan: {e}")
         import traceback
         traceback.print_exc()
         flash('Error creating plan. Please try again.', 'error')
         return redirect(url_for('profile_summary'))
+    finally:
+        close_db()
 
 @app.route('/regenerate-workout', methods=['POST'])
 def regenerate_workout():
@@ -922,26 +966,21 @@ def regenerate_workout():
     if 'user_id' not in session:
         return jsonify({"error": "Not authenticated"}), 401
     
+    db = get_db()
     try:
         user_id = session['user_id']
         workout_plan = workout_generator.generate_weekly_plan(user_id)
         
         # Update database
         week_date = workout_plan['week_of']
-        conn = get_db_connection()
         
-        conn.execute(
-            'DELETE FROM workout_plans WHERE user_id = ? AND week_date = ?',
-            (user_id, week_date)
-        )
+        db.execute(text('DELETE FROM workout_plans WHERE user_id = :user_id AND week_date = :week_date'),
+                    {'user_id': user_id, 'week_date': week_date})
         
-        conn.execute(
-            'INSERT INTO workout_plans (user_id, week_date, plan_data) VALUES (?, ?, ?)',
-            (user_id, week_date, json.dumps(workout_plan))
-        )
+        db.execute(text('INSERT INTO workout_plans (user_id, week_date, plan_data) VALUES (:user_id, :week_date, :plan_data)'),
+                    {'user_id': user_id, 'week_date': week_date, 'plan_data': json.dumps(workout_plan,cls=DecimalEncoder)})
         
-        conn.commit()
-        conn.close()
+        db.commit()
         
         return jsonify({
             "success": True,
@@ -950,7 +989,11 @@ def regenerate_workout():
         }), 200
         
     except Exception as e:
+        db.rollback()
+        logger.error(f"Error regenerating workout: {e}")
         return jsonify({"error": str(e)}), 500
+    finally:
+        close_db()
 
 
 @app.route('/regenerate-meal-plan', methods=['POST'])
@@ -959,18 +1002,20 @@ def regenerate_meal_plan():
     if 'user_id' not in session:
         return jsonify({"error": "Not authenticated"}), 401
     
+    db = get_db()
     try:
         user_id = session['user_id']
         
         # Get user data
-        conn = get_db_connection()
-        user = conn.execute('SELECT * FROM users WHERE id = ?', (user_id,)).fetchone()
+        result = db.execute(text('SELECT * FROM users WHERE id = :id'), {'id': user_id})
+        user = result.fetchone()
+        user_dict = dict(user._mapping)
         
         # Parse dietary restrictions
         dietary = []
-        if user['dietary_restrictions']:
+        if user_dict['dietary_restrictions']:
             try:
-                restrictions = json.loads(user['dietary_restrictions'])
+                restrictions = json.loads(user_dict['dietary_restrictions'])
                 dietary = [r.strip().lower() for r in restrictions if r.strip()]
             except (json.JSONDecodeError, TypeError):
                 dietary = []
@@ -978,7 +1023,7 @@ def regenerate_meal_plan():
         # Call API
         logger.info(f"Regenerating meal plan for user {user_id}")
         raw_meal_plan = meal_api.generate_meal_plan(
-            target_calories=int(user['caloric_target'] or 2000),
+            target_calories=int(user_dict['caloric_target'] or 2000),
             dietary=dietary,
             preferences=", ".join(dietary) if dietary else "",
             num_days=7,
@@ -992,26 +1037,17 @@ def regenerate_meal_plan():
             # Update database
             week_date = datetime.now().strftime('%Y-%m-%d')
             
-            conn.execute(
-                'DELETE FROM meal_plans WHERE user_id = ? AND week_date = ?',
-                (user_id, week_date)
-            )
-            conn.execute(
-                'INSERT INTO meal_plans (user_id, week_date, plan_data) VALUES (?, ?, ?)',
-                (user_id, week_date, json.dumps(raw_meal_plan))
-            )
+            db.execute(text('DELETE FROM meal_plans WHERE user_id = :user_id AND week_date = :week_date'),
+                        {'user_id': user_id, 'week_date': week_date})
+            db.execute(text('INSERT INTO meal_plans (user_id, week_date, plan_data) VALUES (:user_id, :week_date, :plan_data)'),
+                        {'user_id': user_id, 'week_date': week_date, 'plan_data': json.dumps(raw_meal_plan,cls=DecimalEncoder)})
             
-            conn.execute(
-                'DELETE FROM grocery_lists WHERE user_id = ? AND week_date = ?',
-                (user_id, week_date)
-            )
-            conn.execute(
-                'INSERT INTO grocery_lists (user_id, week_date, grocery_data) VALUES (?, ?, ?)',
-                (user_id, week_date, json.dumps(grocery_data))
-            )
+            db.execute(text('DELETE FROM grocery_lists WHERE user_id = :user_id AND week_date = :week_date'),
+                        {'user_id': user_id, 'week_date': week_date})
+            db.execute(text('INSERT INTO grocery_lists (user_id, week_date, grocery_data) VALUES (:user_id, :week_date, :grocery_data)'),
+                        {'user_id': user_id, 'week_date': week_date, 'grocery_data': json.dumps(grocery_data,cls=DecimalEncoder)})
             
-            conn.commit()
-            conn.close()
+            db.commit()
             
             return jsonify({
                 "success": True,
@@ -1019,13 +1055,13 @@ def regenerate_meal_plan():
                 "redirect": url_for('dashboard')
             }), 200
         else:
-            conn.close()
             return jsonify({
                 "success": False,
                 "error": "Meal service unavailable"
             }), 503
     
     except MealPlanningAPIError as e:
+        db.rollback()
         logger.error(f"Validation error: {str(e)}")
         return jsonify({
             "success": False,
@@ -1033,11 +1069,14 @@ def regenerate_meal_plan():
         }), 400
     
     except Exception as e:
+        db.rollback()
         logger.error(f"Error regenerating meal plan: {str(e)}")
         return jsonify({
             "success": False,
             "error": "Internal server error"
         }), 500
+    finally:
+        close_db()
 
 
 @app.route('/dashboard')
@@ -1045,70 +1084,76 @@ def dashboard():
     if 'user_id' not in session:
         return redirect(url_for('index'))
     
-    conn = get_db_connection()
-    
-    # Get user nutrition data
-    user = conn.execute('SELECT * FROM users WHERE id = ?', (session['user_id'],)).fetchone()
-    
-    # Get latest plans
-    workout_plan = conn.execute('SELECT * FROM workout_plans WHERE user_id = ? ORDER BY created_at DESC LIMIT 1',
-                               (session['user_id'],)).fetchone()
-    
-    meal_plan = conn.execute('SELECT * FROM meal_plans WHERE user_id = ? ORDER BY created_at DESC LIMIT 1', 
-                            (session['user_id'],)).fetchone()
-    
-    grocery_list = conn.execute('SELECT * FROM grocery_lists WHERE user_id = ? ORDER BY created_at DESC LIMIT 1', 
-                            (session['user_id'],)).fetchone()
-    conn.close()
-    
-    workout_data = json.loads(workout_plan['plan_data']) if workout_plan else None
-    meal_data = json.loads(meal_plan['plan_data']) if meal_plan else None
-    grocery_data = json.loads(grocery_list['grocery_data']) if grocery_list else None
-    
-    # Extract first day from meal_data for dashboard preview
-    first_day = None
-    if meal_data:
-        if isinstance(meal_data, list) and len(meal_data) > 0:
-            first_day = meal_data[0]
-        elif isinstance(meal_data, dict):
-            if 'days' in meal_data and meal_data['days']:
-                first_day_key = next(iter(meal_data['days']))
-                first_day = meal_data['days'][first_day_key]
-                first_day['day_name'] = first_day_key
-            elif 'meal_plan' in meal_data and meal_data['meal_plan']:
-                if isinstance(meal_data['meal_plan'], list):
-                    first_day = meal_data['meal_plan'][0]
+    db = get_db()
+    try:
+        # Get user nutrition data
+        result = db.execute(text('SELECT * FROM users WHERE id = :id'), {'id': session['user_id']})
+        user = result.fetchone()
+        user_dict = dict(user._mapping)
+        
+        # Get latest plans
+        result = db.execute(text('SELECT * FROM workout_plans WHERE user_id = :id ORDER BY created_at DESC LIMIT 1'),
+                                   {'id': session['user_id']})
+        workout_plan = result.fetchone()
+        
+        result = db.execute(text('SELECT * FROM meal_plans WHERE user_id = :id ORDER BY created_at DESC LIMIT 1'), 
+                                {'id': session['user_id']})
+        meal_plan = result.fetchone()
+        
+        result = db.execute(text('SELECT * FROM grocery_lists WHERE user_id = :id ORDER BY created_at DESC LIMIT 1'), 
+                                {'id': session['user_id']})
+        grocery_list = result.fetchone()
+        
+        workout_data =workout_plan.plan_data if workout_plan else None
+        meal_data = meal_plan.plan_data if meal_plan else None
+        grocery_data = grocery_list.grocery_data if grocery_list else None
+
+        # Extract first day from meal_data for dashboard preview
+        first_day = None
+        if meal_data:
+            if isinstance(meal_data, list) and len(meal_data) > 0:
+                first_day = meal_data[0]
+            elif isinstance(meal_data, dict):
+                if 'days' in meal_data and meal_data['days']:
+                    first_day_key = next(iter(meal_data['days']))
+                    first_day = meal_data['days'][first_day_key]
+                    first_day['day_name'] = first_day_key
+                elif 'meal_plan' in meal_data and meal_data['meal_plan']:
+                    if isinstance(meal_data['meal_plan'], list):
+                        first_day = meal_data['meal_plan'][0]
+                    else:
+                        first_day_key = next(iter(meal_data['meal_plan']))
+                        first_day = meal_data['meal_plan'][first_day_key]
+                elif 'day_1' in meal_data:
+                    first_day = meal_data['day_1']
                 else:
-                    first_day_key = next(iter(meal_data['meal_plan']))
-                    first_day = meal_data['meal_plan'][first_day_key]
-            elif 'day_1' in meal_data:
-                first_day = meal_data['day_1']
-            else:
-                first_day = meal_data
-    
-    # Prepare nutrition targets
-    nutrition_targets = None
-    if user and user['caloric_target']:
-        nutrition_targets = {
-            'calories': int(user['caloric_target']),
-            'protein_g': round(user['protein_target_g'], 1) if user['protein_target_g'] else 0,
-            'carbs_g': round(user['carbs_target_g'], 1) if user['carbs_target_g'] else 0,
-            'fat_g': round(user['fat_target_g'], 1) if user['fat_target_g'] else 0
-        }
+                    first_day = meal_data
+        
+         # Prepare nutrition targets
+        nutrition_targets = None
+        if user and user_dict['caloric_target']:
+            nutrition_targets = {
+                'calories': int(user_dict['caloric_target']),
+                'protein_g': round(user_dict['protein_target_g'], 1) if user_dict['protein_target_g'] else 0,
+                'carbs_g': round(user_dict['carbs_target_g'], 1) if user_dict['carbs_target_g'] else 0,
+                'fat_g': round(user_dict['fat_target_g'], 1) if user_dict['fat_target_g'] else 0
+            }
         
         # Calculate percentages
         if nutrition_targets['calories'] > 0:
             nutrition_targets['protein_pct'] = int((nutrition_targets['protein_g'] * 4 / nutrition_targets['calories']) * 100)
             nutrition_targets['carbs_pct'] = int((nutrition_targets['carbs_g'] * 4 / nutrition_targets['calories']) * 100)
             nutrition_targets['fat_pct'] = int((nutrition_targets['fat_g'] * 9 / nutrition_targets['calories']) * 100)
-    
-    return render_template('dashboard.html', 
-                         workout_plan=workout_data,
-                         meal_plan=meal_data,
-                         first_day=first_day,
-                         grocery_list=grocery_data,
-                         nutrition_targets=nutrition_targets,
-                         user_name=session.get('user_name'))
+
+        return render_template('dashboard.html', 
+                             workout_plan=workout_data,
+                             meal_plan=meal_data,
+                             first_day=first_day,
+                             grocery_list=grocery_data,
+                             nutrition_targets=nutrition_targets,
+                             user_name=session.get('user_name'))
+    finally:
+        close_db()
 
 # NEW: Add workout page route
 @app.route('/workout')
@@ -1116,18 +1161,20 @@ def workout_page():
     if 'user_id' not in session:
         return redirect(url_for('index'))
     
-    conn = get_db_connection()
-    
-    # Get latest workout plan
-    workout_plan = conn.execute('SELECT * FROM workout_plans WHERE user_id = ? ORDER BY created_at DESC LIMIT 1',
-                               (session['user_id'],)).fetchone()
-    conn.close()
-    
-    workout_data = json.loads(workout_plan['plan_data']) if workout_plan else None
-    
-    return render_template('workout.html', 
-                         workout_plan=workout_data,
-                         user_name=session.get('user_name'))
+    db = get_db()
+    try:
+        # Get latest workout plan
+        result = db.execute(text('SELECT * FROM workout_plans WHERE user_id = :id ORDER BY created_at DESC LIMIT 1'),
+                                   {'id': session['user_id']})
+        workout_plan = result.fetchone()
+        
+        workout_data = workout_plan.plan_data if workout_plan else None
+        
+        return render_template('workout.html', 
+                             workout_plan=workout_data,
+                             user_name=session.get('user_name'))
+    finally:
+        close_db()
 
 
 # NEW: Add meals page route
@@ -1136,40 +1183,42 @@ def meals_page():
     if 'user_id' not in session:
         return redirect(url_for('index'))
     
-    conn = get_db_connection()
-    
-    # Get latest meal plan
-    meal_plan = conn.execute('SELECT * FROM meal_plans WHERE user_id = ? ORDER BY created_at DESC LIMIT 1', 
-                            (session['user_id'],)).fetchone()
-    conn.close()
-    
-    meal_data = json.loads(meal_plan['plan_data']) if meal_plan else None
-    
-    # Extract first day from meal_data
-    first_day = None
-    if meal_data:
-        if isinstance(meal_data, list) and len(meal_data) > 0:
-            first_day = meal_data[0]
-        elif isinstance(meal_data, dict):
-            if 'days' in meal_data and meal_data['days']:
-                first_day_key = next(iter(meal_data['days']))
-                first_day = meal_data['days'][first_day_key]
-                first_day['day_name'] = first_day_key
-            elif 'meal_plan' in meal_data and meal_data['meal_plan']:
-                if isinstance(meal_data['meal_plan'], list):
-                    first_day = meal_data['meal_plan'][0]
+    db = get_db()
+    try:
+        # Get latest meal plan
+        result = db.execute(text('SELECT * FROM meal_plans WHERE user_id = :id ORDER BY created_at DESC LIMIT 1'), 
+                                {'id': session['user_id']})
+        meal_plan = result.fetchone()
+        
+        meal_data = meal_plan.plan_data if meal_plan else None
+        
+        # Extract first day from meal_data
+        first_day = None
+        if meal_data:
+            if isinstance(meal_data, list) and len(meal_data) > 0:
+                first_day = meal_data[0]
+            elif isinstance(meal_data, dict):
+                if 'days' in meal_data and meal_data['days']:
+                    first_day_key = next(iter(meal_data['days']))
+                    first_day = meal_data['days'][first_day_key]
+                    first_day['day_name'] = first_day_key
+                elif 'meal_plan' in meal_data and meal_data['meal_plan']:
+                    if isinstance(meal_data['meal_plan'], list):
+                        first_day = meal_data['meal_plan'][0]
+                    else:
+                        first_day_key = next(iter(meal_data['meal_plan']))
+                        first_day = meal_data['meal_plan'][first_day_key]
+                elif 'day_1' in meal_data:
+                    first_day = meal_data['day_1']
                 else:
-                    first_day_key = next(iter(meal_data['meal_plan']))
-                    first_day = meal_data['meal_plan'][first_day_key]
-            elif 'day_1' in meal_data:
-                first_day = meal_data['day_1']
-            else:
-                first_day = meal_data
-    
-    return render_template('meals.html', 
-                         meal_plan=meal_data,
-                         first_day=first_day,
-                         user_name=session.get('user_name'))
+                    first_day = meal_data
+        
+        return render_template('meals.html', 
+                             meal_plan=meal_data,
+                             first_day=first_day,
+                             user_name=session.get('user_name'))
+    finally:
+        close_db()
 
 @app.route('/recipe')
 def recipe_page():
@@ -1188,18 +1237,20 @@ def grocery_page():
     if 'user_id' not in session:
         return redirect(url_for('index'))
     
-    conn = get_db_connection()
-    
-    # Get latest grocery list
-    grocery_list = conn.execute('SELECT * FROM grocery_lists WHERE user_id = ? ORDER BY created_at DESC LIMIT 1', 
-                            (session['user_id'],)).fetchone()
-    conn.close()
-    
-    grocery_data = json.loads(grocery_list['grocery_data']) if grocery_list else None
-    
-    return render_template('grocery.html', 
-                         grocery_list=grocery_data,
-                         user_name=session.get('user_name'))
+    db = get_db()
+    try:
+        # Get latest grocery list
+        result = db.execute(text('SELECT * FROM grocery_lists WHERE user_id = :id ORDER BY created_at DESC LIMIT 1'), 
+                                {'id': session['user_id']})
+        grocery_list = result.fetchone()
+        
+        grocery_data = grocery_list.grocery_data if grocery_list else None
+        
+        return render_template('grocery.html', 
+                             grocery_list=grocery_data,
+                             user_name=session.get('user_name'))
+    finally:
+        close_db()
 
 # Placeholder API endpoints for plan generation
 @app.route('/api/generate-workout-plan', methods=['POST'])
@@ -1208,6 +1259,7 @@ def generate_workout_plan():
     if 'user_id' not in session:
         return jsonify({"error": "Not authenticated"}), 401
     
+    db = get_db()
     try:
         user_id = session['user_id']
         
@@ -1216,29 +1268,22 @@ def generate_workout_plan():
         
         # Save to database
         week_date = workout_plan['week_of']
-        conn = get_db_connection()
         
         # Check if plan already exists for this week
-        existing = conn.execute(
-            'SELECT id FROM workout_plans WHERE user_id = ? AND week_date = ?',
-            (user_id, week_date)
-        ).fetchone()
+        result = db.execute(text('SELECT id FROM workout_plans WHERE user_id = :user_id AND week_date = :week_date'),
+                {'user_id': user_id, 'week_date': week_date})
+        existing = result.fetchone()
         
         if existing:
             # Update existing plan
-            conn.execute(
-                'UPDATE workout_plans SET plan_data = ?, created_at = CURRENT_TIMESTAMP WHERE id = ?',
-                (json.dumps(workout_plan), existing['id'])
-            )
+            db.execute(text('UPDATE workout_plans SET plan_data = :plan_data, created_at = CURRENT_TIMESTAMP WHERE id = :id'),
+                        {'plan_data': json.dumps(workout_plan,cls=DecimalEncoder), 'id': existing.id})
         else:
             # Insert new plan
-            conn.execute(
-                'INSERT INTO workout_plans (user_id, week_date, plan_data) VALUES (?, ?, ?)',
-                (user_id, week_date, json.dumps(workout_plan))
-            )
+            db.execute(text('INSERT INTO workout_plans (user_id, week_date, plan_data) VALUES (:user_id, :week_date, :plan_data)'),
+                        {'user_id': user_id, 'week_date': week_date, 'plan_data': json.dumps(workout_plan,cls=DecimalEncoder)})
         
-        conn.commit()
-        conn.close()
+        db.commit()
         
         return jsonify({
             "success": True,
@@ -1247,12 +1292,16 @@ def generate_workout_plan():
         }), 200
         
     except ValueError as e:
+        db.rollback()
         return jsonify({"error": str(e)}), 400
     except Exception as e:
-        print(f"Error generating workout plan: {e}")
+        db.rollback()
+        logger.error(f"Error generating workout plan: {e}")
         import traceback
         traceback.print_exc()
         return jsonify({"error": "Failed to generate workout plan"}), 500
+    finally:
+        close_db()
 
 @app.route('/api/generate-meal-plan', methods=['POST']) 
 def generate_meal_plan():
@@ -1262,24 +1311,25 @@ def generate_meal_plan():
     if 'user_id' not in session:
         return jsonify({"error": "Not authenticated"}), 401
     
+    db = get_db()
     try:
         user_id = session['user_id']
         
         # Get user data
-        conn = get_db_connection()
-        user = conn.execute('SELECT * FROM users WHERE id = ?', (user_id,)).fetchone()
-        conn.close()
+        result = db.execute(text('SELECT * FROM users WHERE id = :id'), {'id': user_id})
+        user = result.fetchone()
+        user_dict = dict(user._mapping)
         
         # Get custom parameters from request if provided
         data = request.json or {}
-        target_calories = data.get('target_calories', user['caloric_target'] or 2000)
+        target_calories = data.get('target_calories', user_dict['caloric_target'] or 2000)
         num_days = data.get('num_days', 7)
         
         # Parse dietary restrictions
         dietary = []
-        if user['dietary_restrictions']:
+        if user_dict['dietary_restrictions']:
             try:
-                restrictions = json.loads(user['dietary_restrictions'])
+                restrictions = json.loads(user_dict['dietary_restrictions'])
                 dietary = [r.strip().lower() for r in restrictions if r.strip()]
             except (json.JSONDecodeError, TypeError):
                 dietary = []
@@ -1316,6 +1366,8 @@ def generate_meal_plan():
             "success": False,
             "error": "Internal server error"
         }), 500
+    finally:
+        close_db()
 
 @app.route('/api/generate-grocery-list', methods=['POST'])
 def generate_grocery_list():
@@ -1331,7 +1383,9 @@ def logout():
     return response
 
 if __name__ == '__main__':
+    # Initialize database tables (creates tables if they don't exist)
     init_db()
+    
     port = int(os.environ.get('PORT', 5000))
-    debug_mode = os.environ.get('RENDER') is None
+    debug_mode = os.environ.get('FLASK_DEBUG', '1') == '1'
     app.run(host='0.0.0.0', port=port, debug=debug_mode)

@@ -1,44 +1,80 @@
 """
 FitPlan Workout Generator v2.1
 Research-based exercise recommendation system with contraindication filtering
+UPDATED: PostgreSQL for user data (fitplan_db), SQLite for exercise database
 """
 
 import sqlite3
 import json
+import os
 from datetime import datetime, timedelta
 from typing import Dict, List, Tuple, Optional
 import random
+from sqlalchemy import create_engine, text
+from sqlalchemy.orm import sessionmaker
+from dotenv import load_dotenv
+from decimal import Decimal
+
+# Load environment variables
+load_dotenv()
 
 class WorkoutGenerator:
-    def __init__(self, fitplan_db='fitplan.db', exercise_db='exercises.db'):
-        self.fitplan_db = fitplan_db
+    def __init__(self, exercise_db='exercises.db', database_url=None):
+        """
+        Initialize workout generator
+        
+        Args:
+            exercise_db: Path to SQLite exercise database (stays SQLite)
+            database_url: PostgreSQL URL for user data (optional, reads from env if None)
+        """
         self.exercise_db = exercise_db
         
+        # PostgreSQL connection for user data
+        if database_url is None:
+            database_url = os.getenv(
+                'DATABASE_URL',
+                'postgresql://fitplan_user:fitplan_pass@localhost:5432/fitplan_db'
+            )
+        self.database_url = database_url
+        self.engine = create_engine(database_url, pool_pre_ping=True)
+        self.SessionLocal = sessionmaker(bind=self.engine)
+        
     def get_user_profile(self, user_id: int) -> Dict:
-        """Fetch user profile from fitplan.db including workout_schedule preference"""
-        conn = sqlite3.connect(self.fitplan_db)
-        conn.row_factory = sqlite3.Row
-        
-        user = conn.execute('SELECT * FROM users WHERE id = ?', (user_id,)).fetchone()
-        conn.close()
-        
-        if not user:
-            raise ValueError(f"User {user_id} not found")
-        
-        # Parse JSON fields
-        return {
-            'user_id': user['id'],
-            'age': user['age'],
-            'gender': user['gender'],
-            'weight': float(user['weight']),  # in lbs
-            'fitness_goal': user['fitness_goals'],
-            'activity_level': user['activity_level'],
-            'workout_schedule': user['workout_schedule'],
-            'physical_limitations': json.loads(user['physical_limitations']) if user['physical_limitations'] else [],
-            'available_equipment': json.loads(user['available_equipment']) if user['available_equipment'] else [],
-            'tdee': user['tdee'],
-            'bmr': user['bmr']
-        }
+        """Fetch user profile from PostgreSQL including workout_schedule preference"""
+        session = self.SessionLocal()
+        try:
+            result = session.execute(
+                text('SELECT * FROM users WHERE id = :id'),
+                {'id': user_id}
+            )
+            user = result.fetchone()
+            
+            if not user:
+                raise ValueError(f"User {user_id} not found")
+            
+            # Helper to convert Decimal to float
+            def to_float(val):
+                return float(val) if isinstance(val, Decimal) else val
+            
+            # Convert Row to dict
+            user_dict = dict(user._mapping)
+            
+            # Parse JSON fields
+            return {
+                'user_id': user_dict['id'],
+                'age': user_dict['age'],
+                'gender': user_dict['gender'],
+                'weight': to_float(user_dict['weight']),  # in lbs
+                'fitness_goal': user_dict['fitness_goals'],
+                'activity_level': user_dict['activity_level'],
+                'workout_schedule': user_dict['workout_schedule'],
+                'physical_limitations': json.loads(user_dict['physical_limitations']) if user_dict['physical_limitations'] else [],
+                'available_equipment': json.loads(user_dict['available_equipment']) if user_dict['available_equipment'] else [],
+                'tdee': user_dict['tdee'],
+                'bmr': user_dict['bmr']
+            }
+        finally:
+            session.close()
     
     def determine_fitness_level(self, activity_level: str, age: int) -> str:
         """Determine fitness level from activity level and age"""
