@@ -5,6 +5,7 @@ Handles communication with the meal planning microservice
 import os
 import requests
 from typing import Dict, List, Optional
+from datetime import datetime, timedelta
 import logging
 
 logger = logging.getLogger(__name__)
@@ -23,18 +24,11 @@ class MealPlanningAPI:
             'MEAL_API_URL', 
             'https://cqztaifwfa.us-east-1.awsapprunner.com/' # production API as backup
         )
-<<<<<<< HEAD
-        self.timeout = 120  # API developer specified 120 seconds
-=======
         self.timeout = 60  # API developer specified 30 seconds
->>>>>>> 0ec3548 (Stable version before changes in UI flow)
     
     def generate_meal_plan(
         self,
         target_calories: int,
-        target_protein: int = 150,
-        target_fat: int = 70,
-        target_carbs: int = 200,
         dietary: List[str] = None,
         exclusions: str = "",
         preferences: str = "",
@@ -57,7 +51,7 @@ class MealPlanningAPI:
                 {
                     "daily_plans": [
                         {
-                            "day": int,
+                            "day": int (1-7),
                             "target_calories": int,
                             "total_calories": int,
                             "meals": [...]
@@ -74,9 +68,6 @@ class MealPlanningAPI:
         # Prepare request payload
         payload = {
             "target_calories": target_calories,
-            "target_protein": target_protein,
-            "target_fat": target_fat,
-            "target_carbs": target_carbs,
             "dietary": dietary or [],
             "exclusions": exclusions,
             "preferences": preferences,
@@ -162,33 +153,56 @@ class MealPlanningAPI:
         except:
             return False
     
-    def format_for_display(self, meal_plan: Dict) -> Dict:
+    def format_for_display(self, meal_plan: Dict, week_monday: datetime) -> Dict:
         """
-        Format API response for frontend display
+        Format API response for frontend display with actual dates
         
         Args:
-            meal_plan (Dict): Raw API response
+            meal_plan (Dict): Raw API response with days numbered 1-7
+            week_monday (datetime): The Monday of the week for this plan
         
         Returns:
-            Dict: Formatted data ready for templates
+            Dict: Formatted data ready for templates with actual dates
         """
         if not meal_plan or 'daily_plans' not in meal_plan:
             return {}
         
+        # Day names (Monday = 1, Sunday = 7)
+        day_names = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+        
         formatted = {
             'total_days': len(meal_plan['daily_plans']),
-            'days': []
+            'days': {}
         }
         
         for day_plan in meal_plan['daily_plans']:
-            day_data = {
-                'day_number': day_plan['day'] ,  # Make 1-indexed for display -> the API returns numbers form 1 to 7
-                'target_calories': day_plan['target_calories'],
-                'actual_calories': day_plan['total_calories'],
+            day_number = day_plan['day']  # 1-7 from API
+            
+            # Calculate the actual date for this day
+            day_date = week_monday + timedelta(days=day_number - 1)
+            day_name = day_names[day_number - 1]
+            
+            # Format date as "Mon, Oct 28"
+            date_str = day_date.strftime('%b %d')
+            
+            # Store by day number for easy access
+            formatted['days'][day_number] = {
+                'day_number': day_number,
+                'day_name': day_name,
+                'date': date_str,
+                'full_date': day_date.strftime('%Y-%m-%d'),
+                'target_calories': day_plan.get('target_calories', 0),
+                'actual_calories': day_plan.get('total_calories', 0),
+                'target_protein': day_plan.get('target_protein', 0),
+                'actual_protein': day_plan.get('total_protein', 0),
+                'target_carbs': day_plan.get('target_carbs', 0),
+                'actual_carbs': day_plan.get('total_carbs', 0),
+                'target_fat': day_plan.get('target_fat', 0),
+                'actual_fat': day_plan.get('total_fat', 0),
                 'meals': []
             }
             
-            # Group meals by type
+            # Process meals
             for meal in day_plan.get('meals', []):
                 if meal is None:  # Handle null meals
                     continue
@@ -202,18 +216,95 @@ class MealPlanningAPI:
                     'ingredients': meal.get('ingredients', []),
                     'quantities': meal.get('quantities', []),
                     'units': meal.get('units', []),
-                    'instructions': meal.get('instructions', '')
+                    'instructions': meal.get('instructions', ''),
+                    'query': meal.get('query', '')
                 }
                 
-                day_data['meals'].append(meal_data)
-            
-            formatted['days'].append(day_data)
+                formatted['days'][day_number]['meals'].append(meal_data)
         
         return formatted
+    
+    def create_default_meal_plan(self, week_monday: datetime, calories: int = 2000) -> Dict:
+        """
+        Create a default meal plan when API fails
+        
+        Args:
+            week_monday (datetime): The Monday of the week
+            calories (int): Daily calorie target
+        
+        Returns:
+            Dict: Default meal plan structure
+        """
+        day_names = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+        
+        default_plan = {
+            'total_days': 7,
+            'days': {}
+        }
+        
+        # Default meals for each day
+        default_meals = [
+            {
+                'type': 'breakfast',
+                'title': 'Balanced Breakfast',
+                'calories': calories // 4,
+                'description': 'A nutritious breakfast to start your day',
+                'macros': {'protein': '25g', 'carbs': '45g', 'fat': '15g'},
+                'ingredients': [],
+                'quantities': [],
+                'units': [],
+                'instructions': 'Please regenerate your meal plan for detailed recipes.'
+            },
+            {
+                'type': 'lunch',
+                'title': 'Healthy Lunch',
+                'calories': calories // 3,
+                'description': 'A satisfying midday meal',
+                'macros': {'protein': '30g', 'carbs': '50g', 'fat': '18g'},
+                'ingredients': [],
+                'quantities': [],
+                'units': [],
+                'instructions': 'Please regenerate your meal plan for detailed recipes.'
+            },
+            {
+                'type': 'dinner',
+                'title': 'Nutritious Dinner',
+                'calories': calories // 3,
+                'description': 'A complete evening meal',
+                'macros': {'protein': '35g', 'carbs': '45g', 'fat': '20g'},
+                'ingredients': [],
+                'quantities': [],
+                'units': [],
+                'instructions': 'Please regenerate your meal plan for detailed recipes.'
+            }
+        ]
+        
+        for day_num in range(1, 8):
+            day_date = week_monday + timedelta(days=day_num - 1)
+            day_name = day_names[day_num - 1]
+            date_str = day_date.strftime('%b %d')
+            
+            default_plan['days'][day_num] = {
+                'day_number': day_num,
+                'day_name': day_name,
+                'date': date_str,
+                'full_date': day_date.strftime('%Y-%m-%d'),
+                'target_calories': calories,
+                'actual_calories': calories,
+                'target_protein': 100,
+                'actual_protein': 90,
+                'target_carbs': 200,
+                'actual_carbs': 190,
+                'target_fat': 60,
+                'actual_fat': 55,
+                'meals': default_meals.copy()
+            }
+        
+        return default_plan
 
 
 # Convenience function for quick usage
-def generate_meal_plan_for_user(user_profile: Dict) -> Optional[Dict]:
+def generate_meal_plan_for_user(user_profile: Dict, week_monday: datetime) -> Optional[Dict]:
     """
     Generate meal plan based on user profile data
     
@@ -222,9 +313,10 @@ def generate_meal_plan_for_user(user_profile: Dict) -> Optional[Dict]:
             - caloric_target: int
             - dietary_restrictions: str (comma-separated)
             - preferences: str (optional)
+        week_monday (datetime): The Monday of the week for this plan
     
     Returns:
-        Dict: Formatted meal plan or None
+        Dict: Formatted meal plan or default plan
     """
     api = MealPlanningAPI()
     
@@ -234,7 +326,7 @@ def generate_meal_plan_for_user(user_profile: Dict) -> Optional[Dict]:
         restrictions = user_profile['dietary_restrictions'].split(',')
         for r in restrictions:
             r = r.strip().lower()
-            if r:  # Only add non-empty strings
+            if r and r != 'none':  # Only add non-empty and not 'none'
                 dietary.append(r)
     
     # Generate meal plan
@@ -245,7 +337,10 @@ def generate_meal_plan_for_user(user_profile: Dict) -> Optional[Dict]:
         num_days=7
     )
     
+    # If API call succeeded, format the response
     if meal_plan:
-        return api.format_for_display(meal_plan)
+        return api.format_for_display(meal_plan, week_monday)
     
-    return None
+    # If API failed, return default plan
+    logger.warning("Meal API unavailable, returning default plan")
+    return api.create_default_meal_plan(week_monday, user_profile.get('caloric_target', 2000))

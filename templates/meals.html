@@ -73,7 +73,12 @@
     <div class="plan-header">
         <div class="app-logo">🥗</div>
         <div class="app-name">Your Meal Plan</div>
-        <div class="app-tagline">{{ meal_plan.daily_calories or 'Custom' }} cal/day</div>
+        <div class="app-tagline">
+            {% if meal_plan and meal_plan.days %}
+                {% set first_day = meal_plan.days[1] %}
+                {{ first_day.target_calories|int or 'Custom' }} cal/day
+            {% endif %}
+        </div>
     </div>
     
     <div class="scrollable-content">
@@ -83,23 +88,31 @@
                 <button class="day-nav-btn" id="prevDayBtn" onclick="changeDay(-1)">
                     ← Previous
                 </button>
-                <div class="day-indicator" id="dayIndicator">Monday</div>
+                <div class="day-indicator" id="dayIndicator">Loading...</div>
                 <button class="day-nav-btn" id="nextDayBtn" onclick="changeDay(1)">
                     Next →
                 </button>
             </div>
             
-            <!-- Day Content Containers -->
-            {% for day_name, day_data in meal_plan.days.items() %}
-                <div class="day-content" data-day="{{ day_name }}" id="day-{{ loop.index0 }}">
+            <!-- Day Content Containers (days 1-7) -->
+            {% for day_num in range(1, 8) %}
+                {% set day_data = meal_plan.days[day_num] %}
+                <div class="day-content" data-day="{{ day_num }}" id="day-{{ day_num }}">
                     <h3 style="font-size: 14px; margin-bottom: 10px; text-align: center; color: #333;">
-                        {{ day_name }}, {{ day_data.date }}
+                        {{ day_data.day_name }}, {{ day_data.date }}
                     </h3>
                     
                     {% for meal in day_data.meals %}
                         <div class="meal-card">
                             <div class="meal-header">
-                                <div class="meal-title">{{ meal.title }}</div>
+                                <div class="meal-title">
+                                    {% if meal.type == 'breakfast' %}🌅
+                                    {% elif meal.type == 'lunch' %}🥗
+                                    {% elif meal.type == 'dinner' %}🍽️
+                                    {% elif meal.type == 'snack' %}🥜
+                                    {% endif %}
+                                    {{ meal.title }}
+                                </div>
                                 <div class="meal-calories">{{ meal.calories }} cal</div>
                             </div>
                             <div class="meal-description">{{ meal.description }}</div>
@@ -112,7 +125,7 @@
                             <!-- Recipe Link -->
                             {% if meal.ingredients and meal.instructions %}
                                 <a href="#" class="recipe-link" 
-                                   onclick="viewRecipe('{{ day_name }}', {{ loop.index0 }}, event)">
+                                   onclick="viewRecipe({{ day_num }}, {{ loop.index0 }}, event)">
                                     📖 View Recipe
                                 </a>
                             {% endif %}
@@ -121,8 +134,12 @@
                     
                     <div class="summary-box">
                         <div class="summary-row">
-                            <span>Daily Total:</span>
-                            <span>{{ meal_plan.daily_calories or 'N/A' }} calories</span>
+                            <span>Daily Target:</span>
+                            <span>{{ day_data.target_calories|int }} calories</span>
+                        </div>
+                        <div class="summary-row">
+                            <span>Actual Total:</span>
+                            <span>{{ day_data.actual_calories|int }} calories</span>
                         </div>
                     </div>
                 </div>
@@ -149,8 +166,10 @@
 <script>
 // Meal plan data
 let mealPlanData = null;
-let dayNames = [];
-let currentDayIndex = 0;
+let currentDayIndex = {{ current_day }}; // 1-7 from server
+
+// Day names for display
+const dayNames = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', function() {
@@ -159,17 +178,16 @@ document.addEventListener('DOMContentLoaded', function() {
     if (dataElement) {
         mealPlanData = JSON.parse(dataElement.textContent);
         if (mealPlanData && mealPlanData.days) {
-            dayNames = Object.keys(mealPlanData.days);
-            showDay(0);
+            showDay(currentDayIndex);
         }
     }
 });
 
-// Show specific day
-function showDay(index) {
-    if (index < 0 || index >= dayNames.length) return;
+// Show specific day (1-7)
+function showDay(dayNum) {
+    if (dayNum < 1 || dayNum > 7) return;
     
-    currentDayIndex = index;
+    currentDayIndex = dayNum;
     
     // Hide all days
     document.querySelectorAll('.day-content').forEach(el => {
@@ -177,17 +195,19 @@ function showDay(index) {
     });
     
     // Show current day
-    const currentDay = document.getElementById(`day-${index}`);
+    const currentDay = document.getElementById(`day-${dayNum}`);
     if (currentDay) {
         currentDay.classList.add('active');
+        
+        // Get the actual date from the day data
+        const dayData = mealPlanData.days[dayNum];
+        const displayText = `${dayData.day_name.substring(0, 3)}, ${dayData.date}`;
+        document.getElementById('dayIndicator').textContent = displayText;
     }
     
-    // Update indicator
-    document.getElementById('dayIndicator').textContent = dayNames[index];
-    
     // Update button states
-    document.getElementById('prevDayBtn').disabled = (index === 0);
-    document.getElementById('nextDayBtn').disabled = (index === dayNames.length - 1);
+    document.getElementById('prevDayBtn').disabled = (dayNum === 1);
+    document.getElementById('nextDayBtn').disabled = (dayNum === 7);
     
     // Scroll to top
     const scrollableContent = document.querySelector('.scrollable-content');
@@ -198,28 +218,28 @@ function showDay(index) {
 
 // Change day (Previous/Next)
 function changeDay(direction) {
-    const newIndex = currentDayIndex + direction;
-    if (newIndex >= 0 && newIndex < dayNames.length) {
-        showDay(newIndex);
+    const newDayNum = currentDayIndex + direction;
+    if (newDayNum >= 1 && newDayNum <= 7) {
+        showDay(newDayNum);
     }
 }
 
 // View recipe - navigate to recipe page with data
-function viewRecipe(dayName, mealIndex, event) {
+function viewRecipe(dayNum, mealIndex, event) {
     event.preventDefault();
     
-    if (!mealPlanData || !mealPlanData.days || !mealPlanData.days[dayName]) {
+    if (!mealPlanData || !mealPlanData.days || !mealPlanData.days[dayNum]) {
         alert('Recipe data not available');
         return;
     }
     
-    const meal = mealPlanData.days[dayName].meals[mealIndex];
+    const meal = mealPlanData.days[dayNum].meals[mealIndex];
     
     // Store meal data in sessionStorage for recipe page
     sessionStorage.setItem('currentRecipe', JSON.stringify(meal));
     
     // Navigate to recipe page
-    window.location.href = '/recipe?day=' + encodeURIComponent(dayName) + '&meal=' + mealIndex;
+    window.location.href = '/recipe?day=' + dayNum + '&meal=' + mealIndex;
 }
 </script>
 {% endblock %}

@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+
+{% block title %}FitPlan - Privacy Policy{% endblock %}
+
+{% block content %}
+<div class="phone-frame">
+    <div class="scrollable-content">
+        <div class="app-header" style="margin-bottom: 20px;">
+            <div class="app-logo">🔒</div>
+            <div class="app-name" style="font-size: 20px;">Privacy Policy</div>
+            <div class="app-tagline">MacroMind Health & Fitness</div>
+        </div>
+        
+        <div style="text-align: left; line-height: 1.6; font-size: 13px; color: #333;">
+            <p style="margin-bottom: 15px;">
+                <strong>Last Updated:</strong> {{ current_date or 'October 29, 2025' }}
+            </p>
+            
+            <h3 style="font-size: 15px; margin: 20px 0 10px 0; color: #667eea;">1. Information We Collect</h3>
+            <p style="margin-bottom: 12px;">
+                MacroMind ("we," "our," or "us") collects personal information you provide when creating your personalized fitness and nutrition plans, including:
+            </p>
+            <ul style="margin-left: 20px; margin-bottom: 15px;">
+                <li>Basic profile information (name, email, age, gender)</li>
+                <li>Physical metrics (height, weight, activity level)</li>
+                <li>Fitness goals and workout preferences</li>
+                <li>Dietary restrictions and food preferences</li>
+                <li>Physical limitations and health considerations</li>
+                <li>Equipment access information</li>
+            </ul>
+            
+            <h3 style="font-size: 15px; margin: 20px 0 10px 0; color: #667eea;">2. How We Use Your Information</h3>
+            <p style="margin-bottom: 12px;">
+                We use your information to:
+            </p>
+            <ul style="margin-left: 20px; margin-bottom: 15px;">
+                <li>Generate personalized workout and meal plans</li>
+                <li>Calculate nutritional targets and caloric needs</li>
+                <li>Provide tailored exercise recommendations</li>
+                <li>Create customized grocery lists</li>
+                <li>Improve our service and user experience</li>
+            </ul>
+            
+            <h3 style="font-size: 15px; margin: 20px 0 10px 0; color: #667eea;">3. Data Security</h3>
+            <p style="margin-bottom: 15px;">
+                We implement industry-standard security measures to protect your personal information. Your data is encrypted and stored securely. We do not sell your personal information to third parties.
+            </p>
+            
+            <h3 style="font-size: 15px; margin: 20px 0 10px 0; color: #667eea;">4. Your Rights</h3>
+            <p style="margin-bottom: 12px;">
+                You have the right to:
+            </p>
+            <ul style="margin-left: 20px; margin-bottom: 15px;">
+                <li>Access your personal data</li>
+                <li>Correct inaccurate information</li>
+                <li>Request deletion of your account and data</li>
+                <li>Opt-out of marketing communications</li>
+                <li>Export your data</li>
+            </ul>
+            
+            <h3 style="font-size: 15px; margin: 20px 0 10px 0; color: #667eea;">5. Health Disclaimer</h3>
+            <p style="margin-bottom: 15px;">
+                MacroMind provides general fitness and nutrition information. Always consult with qualified healthcare professionals before starting any new diet or exercise program. We are not responsible for any health issues that may arise from using our service.
+            </p>
+            
+            <h3 style="font-size: 15px; margin: 20px 0 10px 0; color: #667eea;">6. Changes to This Policy</h3>
+            <p style="margin-bottom: 15px;">
+                We may update this privacy policy from time to time. We will notify you of any significant changes via email or through the application.
+            </p>
+            
+            <h3 style="font-size: 15px; margin: 20px 0 10px 0; color: #667eea;">7. Contact Us</h3>
+            <p style="margin-bottom: 15px;">
+                If you have questions about this privacy policy, please contact us at:
+                <br><strong>privacy@macromind.com</strong>
+            </p>
+        </div>
+    </div>
+    
+    <div class="navigation">
+        <a href="{{ url_for('profile_summary') }}" style="width: 100%;">
+            <button type="button" class="btn-primary" style="width: 100%;">← Back to Profile</button>
+        </a>
+    </div>
+</div>
+{% endblock %}

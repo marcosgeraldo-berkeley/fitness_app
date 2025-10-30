@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+
+{% block title %}FitPlan - Food Preferences{% endblock %}
+
+{% block content %}
+<div class="phone-frame">
+    <div class="progress-bar">
+        <div class="progress-fill" style="width: 89%"></div>
+    </div>
+    <div class="step-indicator">Step 8 of 9 • Food Preferences</div>
+    
+    <div class="scrollable-content">
+        <h3 style="font-size: 18px; margin-bottom: 10px; text-align: center;">Tell us your food preferences</h3>
+        <p style="font-size: 14px; color: #666; text-align: center; margin-bottom: 25px;">Help us personalize your meal plan</p>
+        
+        <form method="POST" action="{{ url_for('save_food_preferences') }}" id="foodPreferencesForm" autocomplete="off">
+            <div class="form-group">
+                <label class="form-label">
+                    Cuisines or Ingredients You Enjoy
+                    <span style="font-size: 11px; font-weight: normal; color: #999;">(Optional)</span>
+                </label>
+                <textarea 
+                    name="food_preferences" 
+                    class="form-input form-textarea" 
+                    placeholder="E.g., Mediterranean cuisine, spicy foods, chicken, salmon, broccoli..."
+                    rows="4"
+                    maxlength="500">{{ user.food_preferences if user and user.food_preferences else '' }}</textarea>
+                <div class="char-counter">
+                    <span class="char-count">0</span>/500 characters
+                </div>
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">
+                    Foods to Avoid
+                    <span style="font-size: 11px; font-weight: normal; color: #999;">(Optional)</span>
+                </label>
+                <textarea 
+                    name="food_exclusions" 
+                    class="form-input form-textarea" 
+                    placeholder="E.g., red meat, mushrooms, cilantro, overly spicy dishes..."
+                    rows="4"
+                    maxlength="500">{{ user.food_exclusions if user and user.food_exclusions else '' }}</textarea>
+                <div class="char-counter">
+                    <span class="char-count">0</span>/500 characters
+                </div>
+            </div>
+            
+            <div class="alert-box">
+                <p class="alert-text">
+                    💡 These preferences complement your dietary restrictions and help us create a meal plan you'll love!
+                </p>
+            </div>
+        </form>
+    </div>
+    
+    <div class="navigation">
+        <a href="{{ url_for('dietary_restrictions') }}">
+            <button type="button" class="btn-back">Back</button>
+        </a>
+        <button type="submit" form="foodPreferencesForm" class="btn-next">Next</button>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/forms.js') }}"></script>
+<script>
+// Character counter for textareas
+document.addEventListener('DOMContentLoaded', function() {
+    const textareas = document.querySelectorAll('.form-textarea');
+    
+    textareas.forEach(textarea => {
+        const counter = textarea.parentElement.querySelector('.char-count');
+        
+        // Set initial count
+        if (counter) {
+            counter.textContent = textarea.value.length;
+        }
+        
+        textarea.addEventListener('input', function() {
+            if (counter) {
+                counter.textContent = this.value.length;
+            }
+        });
+    });
+});
+</script>
+{% endblock %}

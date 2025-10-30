@@ -7,19 +7,19 @@
     <div class="progress-bar">
         <div class="progress-fill" style="width: 100%"></div>
     </div>
-    <div class="step-indicator">Step 8 of 8 • Ready to create your plan!</div>
+    <div class="step-indicator" style="font-size: 12px;">Step 9 of 9 • Ready to create your plan!</div>
     
     <div class="scrollable-content">
-        <h3 style="font-size: 18px; margin-bottom: 20px; text-align: center;">Review Your Profile</h3>
+        <h3 style="font-size: 16px; margin-bottom: 15px; text-align: center;">Review Your Profile</h3>
         
-        <div class="profile-summary">
+        <div class="profile-summary profile-summary-compact">
             <div class="profile-item">
                 <span class="profile-label">Name:</span>
                 <span class="profile-value">{{ user.name }}</span>
             </div>
             <div class="profile-item">
                 <span class="profile-label">Age:</span>
-                <span class="profile-value">{{ user.age }}</span>
+                <span class="profile-value">{{ user.age }} years</span>
             </div>
             <div class="profile-item">
                 <span class="profile-label">Gender:</span>
@@ -27,40 +27,37 @@
             </div>
             <div class="profile-item">
                 <span class="profile-label">Height:</span>
-                <span class="profile-value">{{ user.height }}</span>
-            </div>
-            <div class="profile-item">
-                <span class="profile-label">Weight:</span>
-                <span class="profile-value">{{ user.weight }} lbs</span>
-            </div>
-            <div class="profile-item">
-                <span class="profile-label">Goal:</span>
-                <span class="profile-value">{{ user.fitness_goals|replace('-', ' ')|title }}</span>
-            </div>
-            <div class="profile-item">
-                <span class="profile-label">Restrictions:</span>
                 <span class="profile-value">
-                    {% if user.dietary_restrictions %}
-                        {% set restrictions = user.dietary_restrictions | fromjson %}
-                        {% if 'none' in restrictions %}
-                            None
-                        {% else %}
-                            {{ restrictions | join(', ') | replace('-', ' ') | title }}
-                        {% endif %}
+                    {% if user.height %}
+                        {% set feet = (user.height | int) // 12 %}
+                        {% set inches = (user.height | int) % 12 %}
+                        {{ feet }}'{{ inches }}"
                     {% else %}
                         Not specified
                     {% endif %}
                 </span>
             </div>
             <div class="profile-item">
-                <span class="profile-label">Limitations:</span>
+                <span class="profile-label">Weight:</span>
+                <span class="profile-value">{{ user.weight }} lbs</span>
+            </div>
+            <div class="profile-item">
+                <span class="profile-label">Activity Level:</span>
+                <span class="profile-value">{{ user.activity_level|replace('_', ' ')|title if user.activity_level else 'Not specified' }}</span>
+            </div>
+            <div class="profile-item">
+                <span class="profile-label">Fitness Goal:</span>
+                <span class="profile-value">{{ user.fitness_goals|replace('-', ' ')|title }}</span>
+            </div>
+            <div class="profile-item">
+                <span class="profile-label">Workout Days/Week:</span>
                 <span class="profile-value">
-                    {% if user.physical_limitations %}
-                        {% set limitations = user.physical_limitations | fromjson %}
-                        {% if 'none' in limitations %}
-                            None
-                        {% else %}
-                            {{ limitations | join(', ') | replace('-', ' ') | title }}
+                    {% if user.workout_schedule %}
+                        {% if user.workout_schedule == '1' %}1-2 days
+                        {% elif user.workout_schedule == '3' %}3-4 days
+                        {% elif user.workout_schedule == '5' %}5-6 days
+                        {% elif user.workout_schedule == '7' %}Every day
+                        {% else %}{{ user.workout_schedule }} days
                         {% endif %}
                     {% else %}
                         Not specified
@@ -78,26 +75,199 @@
                     {% endif %}
                 </span>
             </div>
+            <div class="profile-item">
+                <span class="profile-label">Physical Limitations:</span>
+                <span class="profile-value">
+                    {% if user.physical_limitations %}
+                        {% set limitations = user.physical_limitations | fromjson %}
+                        {% if 'none' in limitations %}
+                            None
+                        {% else %}
+                            {{ limitations | join(', ') | replace('-', ' ') | title }}
+                        {% endif %}
+                    {% else %}
+                        Not specified
+                    {% endif %}
+                </span>
+            </div>
+            <div class="profile-item">
+                <span class="profile-label">Dietary Restrictions:</span>
+                <span class="profile-value">
+                    {% if user.dietary_restrictions %}
+                        {% set restrictions = user.dietary_restrictions | fromjson %}
+                        {% if 'none' in restrictions %}
+                            None
+                        {% else %}
+                            {{ restrictions | join(', ') | replace('-', ' ') | title }}
+                        {% endif %}
+                    {% else %}
+                        Not specified
+                    {% endif %}
+                </span>
+            </div>
+            <div class="profile-item">
+                <span class="profile-label">Food Preferences:</span>
+                <span class="profile-value">
+                    {{ user.food_preferences if user.food_preferences else 'None specified' }}
+                </span>
+            </div>
+            <div class="profile-item">
+                <span class="profile-label">Foods to Avoid:</span>
+                <span class="profile-value">
+                    {{ user.food_exclusions if user.food_exclusions else 'None specified' }}
+                </span>
+            </div>
         </div>
         
-        <div style="text-align: center; margin-bottom: 20px;">
-            <p style="font-size: 14px; color: #666; line-height: 1.5;">
-                Based on your profile, we'll create personalized weekly workout plans, meal plans, and grocery lists tailored to your goals and preferences.
+        <div style="text-align: center; margin: 15px 0 10px 0;">
+            <p style="font-size: 12px; color: #666; line-height: 1.4;">
+                We'll create personalized weekly workout plans, meal plans, and grocery lists tailored to your goals and preferences.
             </p>
         </div>
         
-        <form method="POST" action="{{ url_for('create_plan') }}"  id="createPlanForm">
-            <button type="submit" class="btn-primary btn-create-plan" style="width: 100%;">Create My Plan</button>
+        <form method="POST" action="{{ url_for('create_plan') }}" id="createPlanForm">
+            <!-- Privacy Policy Checkbox -->
+            <div class="privacy-checkbox-wrapper">
+                <label class="privacy-checkbox-label">
+                    <input type="checkbox" id="privacyAccept" name="privacy_accepted" required>
+                    <span class="checkbox-custom"></span>
+                    <span class="privacy-text">
+                        I accept the 
+                        <a href="{{ url_for('privacy_policy') }}" class="privacy-link" target="_blank">privacy policy</a> 
+                        of MacroMind
+                    </span>
+                </label>
+            </div>
+            
+            <button type="submit" class="btn-primary btn-create-plan" style="width: 100%;" id="createPlanBtn" disabled>
+                Create My Plan
+            </button>
         </form>
     </div>
     
     <div class="navigation">
+        <a href="{{ url_for('dashboard') }}">
+            <button type="button" class="btn-secondary">← Dashboard</button>
+        </a>
         <a href="{{ url_for('questionnaire_intro') }}">
-            <button type="button" class="btn-back">Edit Profile</button>
+            <button type="button" class="btn-secondary">Edit Profile</button>
         </a>
     </div>
 </div>
 {% endblock %}
+
+{% block extra_css %}
+<style>
+/* Compact profile summary styles */
+.profile-summary-compact {
+    padding: 15px;
+}
+
+.profile-summary-compact .profile-item {
+    margin-bottom: 10px;
+    padding-bottom: 6px;
+    font-size: 12px;
+}
+
+.profile-summary-compact .profile-label {
+    font-size: 11px;
+}
+
+.profile-summary-compact .profile-value {
+    font-size: 11px;
+    max-width: 60%;
+    word-wrap: break-word;
+}
+
+/* Privacy checkbox styles */
+.privacy-checkbox-wrapper {
+    margin: 15px 0;
+    padding: 12px;
+    background: #f8f9ff;
+    border-radius: 8px;
+    border: 1px solid #e1e8ed;
+}
+
+.privacy-checkbox-label {
+    display: flex;
+    align-items: flex-start;
+    cursor: pointer;
+    font-size: 11px;
+    line-height: 1.4;
+}
+
+.privacy-checkbox-label input[type="checkbox"] {
+    position: absolute;
+    opacity: 0;
+}
+
+.checkbox-custom {
+    width: 18px;
+    height: 18px;
+    border: 2px solid #667eea;
+    border-radius: 4px;
+    margin-right: 10px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s ease;
+    background: white;
+}
+
+.privacy-checkbox-label input[type="checkbox"]:checked + .checkbox-custom {
+    background: #667eea;
+}
+
+.privacy-checkbox-label input[type="checkbox"]:checked + .checkbox-custom::after {
+    content: "✓";
+    color: white;
+    font-size: 12px;
+    font-weight: bold;
+}
+
+.privacy-text {
+    color: #333;
+    flex: 1;
+}
+
+.privacy-link {
+    color: #667eea;
+    text-decoration: none;
+    font-weight: 600;
+}
+
+.privacy-link:hover {
+    text-decoration: underline;
+}
+
+/* Disabled button state */
+.btn-create-plan:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.btn-create-plan:disabled:hover {
+    transform: none;
+    box-shadow: none;
+}
+</style>
+{% endblock %}
+
 {% block extra_js %}
 <script src="{{ url_for('static', filename='js/forms.js') }}"></script>
+<script>
+// Enable/disable Create Plan button based on privacy checkbox
+document.addEventListener('DOMContentLoaded', function() {
+    const privacyCheckbox = document.getElementById('privacyAccept');
+    const createPlanBtn = document.getElementById('createPlanBtn');
+    
+    if (privacyCheckbox && createPlanBtn) {
+        privacyCheckbox.addEventListener('change', function() {
+            createPlanBtn.disabled = !this.checked;
+        });
+    }
+});
+</script>
 {% endblock %}

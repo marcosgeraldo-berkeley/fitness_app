@@ -289,8 +289,10 @@
     <div class="plan-header">
         <div class="app-logo">💪</div>
         <div class="app-name">Your Workout Plan</div>
-        <div class="app-tagline">
-            {% if workout_plan.week_of %}
+        <div class="app-tagline" style="font-size: 12px;">
+            {% if workout_plan.week_range %}
+                Week of {{ workout_plan.week_range }}
+            {% elif workout_plan.week_of %}
                 Week of {{ workout_plan.week_of }}
             {% elif workout_plan.week %}
                 {{ workout_plan.week }}
