@@ -11,7 +11,7 @@ from services.meal_api_client import MealPlanningAPI, MealPlanningAPIError
 from flask import Flask, render_template, request, redirect, url_for, session, jsonify, flash, make_response
 
 # PostgreSQL imports
-from database import get_db, close_db, init_db
+from database import get_db, close_db, init_db, get_engine
 from sqlalchemy import text
 from dotenv import load_dotenv
 from decimal import Decimal
@@ -259,8 +259,14 @@ logger = logging.getLogger(__name__)
 def ensure_database_schema():
     """Make sure required tables and columns exist before serving traffic."""
     try:
+        logger.info("Verifying database schema...")
         init_db()
         logger.info("Database schema verified.")
+        # Log the database connection string (without password)
+        # Get the database engine
+        engine = get_engine()
+        logger.info(f"Connected to database: {engine.url}")
+
     except Exception:
         logger.exception("Failed to initialize database schema.")
         raise

@@ -46,7 +46,7 @@ conn_str = (
     f"@{creds['host']}:{creds['port']}/{creds['dbname']}"
 )
 # engine = create_engine(conn_str, pool_pre_ping=True)
-print(conn_str)
+# print(conn_str)
 
 # Create engine
 engine = create_engine(
@@ -92,3 +92,7 @@ def init_db():
 def close_db():
     """Close database session"""
     SessionLocal.remove()
+
+def get_engine():
+    """Get the SQLAlchemy engine"""
+    return engine
