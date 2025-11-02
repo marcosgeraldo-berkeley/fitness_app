@@ -1,6 +1,8 @@
 import sqlite3
 import json
 from datetime import datetime
+from database import get_db
+from sqlalchemy import text
 
 def get_db_connection():
     conn = sqlite3.connect('fitplan.db')
@@ -8,9 +10,9 @@ def get_db_connection():
     return conn
 
 def read_users():
-    conn = get_db_connection()
-    users = conn.execute('SELECT * FROM users ORDER BY created_at DESC').fetchall()
-    conn.close()
+    db = get_db()
+    # Read all users from the postgres database
+    users = db.execute(text("SELECT * FROM users")).fetchall()
     print("=" * 50)
     print(f"USERS TABLE - {len(users)} records found")
     print("=" * 50)

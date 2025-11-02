@@ -256,6 +256,18 @@ def parse_height_to_cm(height_str):
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+def ensure_database_schema():
+    """Make sure required tables and columns exist before serving traffic."""
+    try:
+        init_db()
+        logger.info("Database schema verified.")
+    except Exception:
+        logger.exception("Failed to initialize database schema.")
+        raise
+
+# Ensure schema as soon as the app module loads (covers CLI runners & WSGI servers)
+ensure_database_schema()
+
 # Initialize meal API client 
 meal_api = MealPlanningAPI()
 
