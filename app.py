@@ -15,6 +15,7 @@ from database import get_db, close_db, init_db, get_engine
 from sqlalchemy import text
 from dotenv import load_dotenv
 from decimal import Decimal
+import requests
 
 # Load environment variables FIRST
 load_dotenv()
@@ -1521,3 +1522,28 @@ if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     debug_mode = os.environ.get('FLASK_DEBUG', '1') == '1'
     app.run(host='0.0.0.0', port=port, debug=debug_mode)
+
+@app.route("/_probe/out")
+def probe_out():
+    base = os.getenv("RECIPE_API_BASE", "")
+    out = {}
+    try:
+        r = requests.get("https://ifconfig.me", timeout=5)
+        out["internet_ok"] = True
+        out["public_ip"] = r.text.strip()[:80]
+    except Exception as e:
+        out["internet_ok"] = False
+        out["internet_err"] = str(e)
+
+    try:
+        if base:
+            r2 = requests.get(f"{base.rstrip('/')}/status", timeout=5)
+            out["api_base"] = base
+            out["api_status_code"] = r2.status_code
+            out["api_body"] = r2.text[:200]
+        else:
+            out["api_base_missing"] = True
+    except Exception as e:
+        out["api_base"] = base
+        out["api_err"] = str(e)
+    return jsonify(out)
