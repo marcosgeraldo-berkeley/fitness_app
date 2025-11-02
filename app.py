@@ -1022,17 +1022,47 @@ def create_plan():
         
         # ============ SAVE EVERYTHING TO DATABASE ============
         
-        # Save workout plan
-        db.execute(text('INSERT INTO workout_plans (user_id, week_date, plan_data) VALUES (:user_id, :week_date, :plan_data)'),
-                    {'user_id': user_id, 'week_date': week_date, 'plan_data': json.dumps(workout_data, cls=DecimalEncoder)})
+        # Save workout plan (upsert to overwrite existing weeks)
+        db.execute(text('''
+            INSERT INTO workout_plans (user_id, week_date, plan_data)
+            VALUES (:user_id, :week_date, :plan_data)
+            ON CONFLICT (user_id, week_date)
+            DO UPDATE SET
+                plan_data = EXCLUDED.plan_data,
+                updated_at = CURRENT_TIMESTAMP
+        '''), {
+            'user_id': user_id,
+            'week_date': week_date,
+            'plan_data': json.dumps(workout_data, cls=DecimalEncoder)
+        })
         
         # Save meal plan (storing the RAW API output)
-        db.execute(text('INSERT INTO meal_plans (user_id, week_date, plan_data) VALUES (:user_id, :week_date, :plan_data)'),
-                    {'user_id': user_id, 'week_date': week_date, 'plan_data': json.dumps(meal_data, cls=DecimalEncoder)})
+        db.execute(text('''
+            INSERT INTO meal_plans (user_id, week_date, plan_data)
+            VALUES (:user_id, :week_date, :plan_data)
+            ON CONFLICT (user_id, week_date)
+            DO UPDATE SET
+                plan_data = EXCLUDED.plan_data,
+                updated_at = CURRENT_TIMESTAMP
+        '''), {
+            'user_id': user_id,
+            'week_date': week_date,
+            'plan_data': json.dumps(meal_data, cls=DecimalEncoder)
+        })
         
         # Save grocery list
-        db.execute(text('INSERT INTO grocery_lists (user_id, week_date, grocery_data) VALUES (:user_id, :week_date, :grocery_data)'),
-                    {'user_id': user_id, 'week_date': week_date, 'grocery_data': json.dumps(grocery_data, cls=DecimalEncoder)})
+        db.execute(text('''
+            INSERT INTO grocery_lists (user_id, week_date, grocery_data)
+            VALUES (:user_id, :week_date, :grocery_data)
+            ON CONFLICT (user_id, week_date)
+            DO UPDATE SET
+                grocery_data = EXCLUDED.grocery_data,
+                updated_at = CURRENT_TIMESTAMP
+        '''), {
+            'user_id': user_id,
+            'week_date': week_date,
+            'grocery_data': json.dumps(grocery_data, cls=DecimalEncoder)
+        })
         
         db.commit()
         

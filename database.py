@@ -8,7 +8,7 @@ from sqlalchemy.orm import sessionmaker, scoped_session
 from sqlalchemy.ext.declarative import declarative_base
 from dotenv import load_dotenv
 from db_schema import DATABASE_SCHEMA
-from urllib.parse import urlencode, urlparse, urlunparse, parse_qsl
+from urllib.parse import quote_plus, urlencode, urlparse, urlunparse, parse_qsl
 
 # Load environment variables
 load_dotenv()
@@ -39,17 +39,18 @@ def get_db_creds():
         "dbname": os.getenv("POSTGRES_DB", "fitplan_db"),
     }
 
-def add_query_params(url: str, **params) -> str:
-    """Append/merge query params to a DB URL."""
-    u = urlparse(url)
-    q = dict(parse_qsl(u.query))
-    q.update({k: v for k, v in params.items() if v is not None})
+def add_params(url, **extra):
+    u = urlparse(url); q = dict(parse_qsl(u.query)); q.update(extra)
     return urlunparse(u._replace(query=urlencode(q)))
 
 creds = get_db_creds()
 
-# Build base SQLAlchemy URL (psycopg2 dialect)
-base_url = f"postgresql+psycopg2://{creds['username']}:{creds['password']}@{creds['host']}:{creds['port']}/{creds['dbname']}"
+# creds from your existing get_db_creds()
+user = quote_plus(creds["username"])       # quote in case of special chars
+pwd  = quote_plus(creds["password"])
+host = creds["host"]; port = creds["port"]; db = creds["dbname"]
+
+base_url = f"postgresql+psycopg2://{user}:{pwd}@{host}:{port}/{db}"
 
 # Decide whether to require SSL
 # - If DATABASE_SECRET_ARN is present, assume production and require SSL
@@ -57,9 +58,13 @@ base_url = f"postgresql+psycopg2://{creds['username']}:{creds['password']}@{cred
 force_ssl = bool(os.getenv("DATABASE_SECRET_ARN")) or os.getenv("FORCE_LOCAL_SSL", "false").lower() in ("1", "true", "yes")
 
 if force_ssl:
-    conn_str = add_query_params(base_url, sslmode="require")
+    conn_str = add_params(base_url, sslmode="require")
+    connection_args = {"sslmode": "require"}
 else:
     conn_str = base_url
+    connection_args = {}
+connection_args["connect_timeout"] = 5  # fail fast while testing # TODO: extend this for production
+
 
 # Create engine
 engine = create_engine(
@@ -67,9 +72,11 @@ engine = create_engine(
     pool_size=10,
     max_overflow=20,
     pool_pre_ping=True,  # Verify connections before using
-    connect_args={"connect_timeout": 5},  # fail fast while testing # TODO: extend this for production
+    connect_args=connection_args,
     echo=False  # Set to True for SQL query logging
 )
+
+
 
 # Create session factory
 SessionLocal = scoped_session(sessionmaker(bind=engine))
