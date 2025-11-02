@@ -63,7 +63,7 @@ class MealPlanningAPI:
         Raises:
             MealPlanningAPIError: If API returns validation errors
         """
-        url = f"{self.base_url}/meal-planning/n-day"
+        url = f"{self.base_url}meal-planning/n-day"
         
         # Prepare request payload
         payload = {
