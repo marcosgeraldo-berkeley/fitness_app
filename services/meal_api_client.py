@@ -81,7 +81,7 @@ class MealPlanningAPI:
         
         try:
             logger.info(f"Calling meal planning API: {url}")
-            logger.debug(f"Request payload: {payload}")
+            logger.info(f"Request payload: {payload}")
             
             response = requests.post(
                 url,
