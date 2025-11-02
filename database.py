@@ -2,7 +2,7 @@
 Database configuration for PostgreSQL
 """
 import os, json
-import boto3
+# import boto3
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker, scoped_session
 from sqlalchemy.ext.declarative import declarative_base
@@ -27,9 +27,11 @@ def get_db_creds():
     # AWS path: fetch secret by ARN
     arn = os.getenv("DATABASE_SECRET_ARN")
     if arn:
-        sm = boto3.client("secretsmanager", region_name=os.getenv("AWS_REGION", "us-east-1"))
-        sec = sm.get_secret_value(SecretId=arn)
-        return json.loads(sec["SecretString"])
+        return json.loads(arn)
+    # if arn:
+    #     sm = boto3.client("secretsmanager", region_name=os.getenv("AWS_REGION", "us-east-1"))
+    #     sec = sm.get_secret_value(SecretId=arn)
+    #     return json.loads(sec["SecretString"])
 
     # Fallback: read split vars (useful for quick tests)
     return {
