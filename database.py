@@ -8,6 +8,7 @@ from sqlalchemy.orm import sessionmaker, scoped_session
 from sqlalchemy.ext.declarative import declarative_base
 from dotenv import load_dotenv
 from db_schema import DATABASE_SCHEMA
+from urllib.parse import urlencode, urlparse, urlunparse, parse_qsl
 
 # Load environment variables
 load_dotenv()
@@ -28,10 +29,6 @@ def get_db_creds():
     arn = os.getenv("DATABASE_SECRET_ARN")
     if arn:
         return json.loads(arn)
-    # if arn:
-    #     sm = boto3.client("secretsmanager", region_name=os.getenv("AWS_REGION", "us-east-1"))
-    #     sec = sm.get_secret_value(SecretId=arn)
-    #     return json.loads(sec["SecretString"])
 
     # Fallback: read split vars (useful for quick tests)
     return {
@@ -42,13 +39,27 @@ def get_db_creds():
         "dbname": os.getenv("POSTGRES_DB", "fitplan_db"),
     }
 
+def add_query_params(url: str, **params) -> str:
+    """Append/merge query params to a DB URL."""
+    u = urlparse(url)
+    q = dict(parse_qsl(u.query))
+    q.update({k: v for k, v in params.items() if v is not None})
+    return urlunparse(u._replace(query=urlencode(q)))
+
 creds = get_db_creds()
-conn_str = (
-    f"postgresql+psycopg2://{creds['username']}:{creds['password']}"
-    f"@{creds['host']}:{creds['port']}/{creds['dbname']}"
-)
-# engine = create_engine(conn_str, pool_pre_ping=True)
-# print(conn_str)
+
+# Build base SQLAlchemy URL (psycopg2 dialect)
+base_url = f"postgresql+psycopg2://{creds['username']}:{creds['password']}@{creds['host']}:{creds['port']}/{creds['dbname']}"
+
+# Decide whether to require SSL
+# - If DATABASE_SECRET_ARN is present, assume production and require SSL
+# - OR if explicitly forced via FORCE_LOCAL_SSL=true (useful when you do local TLS)
+force_ssl = bool(os.getenv("DATABASE_SECRET_ARN")) or os.getenv("FORCE_LOCAL_SSL", "false").lower() in ("1", "true", "yes")
+
+if force_ssl:
+    conn_str = add_query_params(base_url, sslmode="require")
+else:
+    conn_str = base_url
 
 # Create engine
 engine = create_engine(
@@ -56,6 +67,7 @@ engine = create_engine(
     pool_size=10,
     max_overflow=20,
     pool_pre_ping=True,  # Verify connections before using
+    connect_args={"connect_timeout": 5},  # fail fast while testing # TODO: extend this for production
     echo=False  # Set to True for SQL query logging
 )
 
