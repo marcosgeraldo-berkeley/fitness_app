@@ -1215,19 +1215,24 @@ def dashboard():
         result = db.execute(text('SELECT * FROM users WHERE id = :id'), {'id': session['user_id']})
         user = result.fetchone()
         user_dict = dict(user._mapping)
+
+        logging.info(f"User dict: {user_dict}")
         
         # Get latest plans
         result = db.execute(text('SELECT * FROM workout_plans WHERE user_id = :id ORDER BY created_at DESC LIMIT 1'),
                             {'id': session['user_id']})
         workout_plan = result.fetchone()
+        logging.info(f"Workout plan: {workout_plan}")
         
         result = db.execute(text('SELECT * FROM meal_plans WHERE user_id = :id ORDER BY created_at DESC LIMIT 1'),
                             {'id': session['user_id']})
         meal_plan = result.fetchone()
+        logging.info(f"Meal plan: {meal_plan}")
         
         result = db.execute(text('SELECT * FROM grocery_lists WHERE user_id = :id ORDER BY created_at DESC LIMIT 1'), 
                                 {'id': session['user_id']})
         grocery_list = result.fetchone()
+        logging.info(f"Grocery list: {grocery_list}")
         
         workout_data =workout_plan.plan_data if workout_plan else None
         meal_data = meal_plan.plan_data if meal_plan else None
