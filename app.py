@@ -1313,9 +1313,9 @@ def workout_page():
             LIMIT 1
         '''), {'id': session['user_id'], 'week_date': week_date})
         workout_plan = result.fetchone()
-        
-        workout_data = workout_plan.plan_data if workout_plan else None
-        
+
+        workout_data = ensure_dict(workout_plan.plan_data) if workout_plan else None
+
         # Add formatted week range to workout data
         if workout_data:
             workout_data['week_range'] = get_week_date_range(monday)
