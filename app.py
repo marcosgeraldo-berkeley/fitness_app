@@ -558,6 +558,15 @@ def get_sample_grocery_data():
     }
 
 
+# Function to check if dictionary is actual a string, convert to dictionary
+def ensure_dict(value):
+    if isinstance(value, str):
+        try:
+            return json.loads(value)
+        except json.JSONDecodeError:
+            return {}
+    return value
+
 # ==================== TEMPLATE FILTERS ====================
 
 @app.template_filter('fromjson')
@@ -1233,10 +1242,10 @@ def dashboard():
                                 {'id': session['user_id']})
         grocery_list = result.fetchone()
         logging.info(f"Grocery list: {grocery_list}")
-        
-        workout_data =workout_plan.plan_data if workout_plan else None
-        meal_data = meal_plan.plan_data if meal_plan else None
-        grocery_data = grocery_list.grocery_data if grocery_list else None
+
+        workout_data = ensure_dict(workout_plan.plan_data) if workout_plan else None
+        meal_data = ensure_dict(meal_plan.plan_data) if meal_plan else None
+        grocery_data = ensure_dict(grocery_list.grocery_data) if grocery_list else None
 
         # Extract first day from meal_data for dashboard preview
         first_day = None
@@ -1344,16 +1353,9 @@ def meals_page():
         
         # Get the raw API data
         raw_meal_data = meal_plan.plan_data
+        raw_meal_data = ensure_dict(raw_meal_data)
 
         logger.info(f"Raw meal data for user {session['user_id']}: {raw_meal_data}")
-
-        # Make sure raw_meal_data is a dictionary rather than a string
-        if isinstance(raw_meal_data, str):
-            try:
-                raw_meal_data = json.loads(raw_meal_data)
-            except json.JSONDecodeError:
-                flash('Error loading meal plan data.', 'error')
-                return redirect(url_for('profile_summary'))
         
         # Format for display with actual dates
         formatted_meal_data = meal_api.format_for_display(raw_meal_data, monday)
