@@ -1339,6 +1339,8 @@ def meals_page():
         
         # Get the raw API data
         raw_meal_data = meal_plan.plan_data
+
+        logger.info(f"Raw meal data for user {session['user_id']}: {raw_meal_data}")
         
         # Format for display with actual dates
         formatted_meal_data = meal_api.format_for_display(raw_meal_data, monday)
