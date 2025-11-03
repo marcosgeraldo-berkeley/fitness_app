@@ -24,6 +24,14 @@
             {% block content %}{% endblock %}
         </main>
     </div>
+
+    <div id="loading-overlay" class="loading-overlay" hidden aria-hidden="true" role="status">
+        <div class="loading-overlay-card">
+            <div class="loading-emoji" id="loading-emoji" aria-hidden="true">🥕</div>
+            <div class="loading-text" id="loading-text">Preparing your plan…</div>
+            <div class="loading-subtext" id="loading-subtext">Hang tight while we personalize your workouts and meals.</div>
+        </div>
+    </div>
     
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>
     {% block extra_js %}{% endblock %}

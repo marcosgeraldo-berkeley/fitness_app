@@ -1,5 +1,103 @@
 // Form handling for FitPlan onboarding
 
+const planLoadingEmojis = [
+    "🥕",
+    "🏋️",
+    "⏲️",
+    "💪",
+    "🍲",
+    "🤸",
+    "🥦",
+    "🏃",
+    "🥘",
+    "🧘",
+    "🍲",
+    "🚴",
+    "🍽️",
+    "🏆",
+    "🌶️",
+    "🥗",
+];
+
+const planLoadingPhrases = [
+    "Chopping the carrots",
+    "Racking the weights",
+    "Preheating the oven",
+    "Chalking the grips",
+    "Simmering the sauce",
+    "Setting up the squat rack",
+    "Baking the broccoli",
+    "Stretching the resistance bands",
+    "Whisking the batter",
+    "Tuning the cardio playlist",
+    "Sautéing the veggies",
+    "Warming up the kettlebells",
+    "Plating the meal",
+    "Dialing in your macros and reps",
+    "Toasting the spices",
+    "Mixing the dressing",
+];
+
+let planLoadingIntervalId = null;
+let planLoadingStep = 0;
+const PLAN_LOADING_CHANGE_MS = 4000;
+
+function updatePlanLoadingOverlay() {
+    const overlay = document.getElementById('loading-overlay');
+    if (!overlay || overlay.hasAttribute('hidden')) {
+        return;
+    }
+
+    const emojiEl = document.getElementById('loading-emoji');
+    const textEl = document.getElementById('loading-text');
+
+    const emoji = planLoadingEmojis[planLoadingStep % planLoadingEmojis.length];
+    const phrase = planLoadingPhrases[planLoadingStep % planLoadingPhrases.length];
+
+    if (emojiEl) {
+        emojiEl.textContent = emoji;
+    }
+
+    if (textEl) {
+        textEl.textContent = `${phrase}…`;
+    }
+
+    planLoadingStep += 1;
+}
+
+function showPlanLoadingOverlay() {
+    const overlay = document.getElementById('loading-overlay');
+    if (!overlay) return;
+
+    const subtextEl = document.getElementById('loading-subtext');
+    if (subtextEl) {
+        subtextEl.textContent = 'Hang tight while we personalize your workouts and meals.';
+    }
+
+    planLoadingStep = Math.floor(Math.random() * planLoadingPhrases.length);
+    overlay.hidden = false;
+    overlay.setAttribute('aria-hidden', 'false');
+    updatePlanLoadingOverlay();
+
+    if (planLoadingIntervalId) {
+        clearInterval(planLoadingIntervalId);
+    }
+    planLoadingIntervalId = window.setInterval(updatePlanLoadingOverlay, PLAN_LOADING_CHANGE_MS);
+}
+
+function hidePlanLoadingOverlay() {
+    if (planLoadingIntervalId) {
+        clearInterval(planLoadingIntervalId);
+        planLoadingIntervalId = null;
+    }
+
+    const overlay = document.getElementById('loading-overlay');
+    if (!overlay) return;
+
+    overlay.hidden = true;
+    overlay.setAttribute('aria-hidden', 'true');
+}
+
 document.addEventListener('DOMContentLoaded', function() {
     // Initialize form handlers
     initializeUnitSelectors();
@@ -377,6 +475,7 @@ function setCreatePlanLoading(button, isLoading) {
         button.innerHTML = '<span class="btn-spinner"></span>Creating Plan...';
         // Prevent any future clicks or state changes
         button.style.pointerEvents = 'none';
+        showPlanLoadingOverlay();
 
     } else {
         // Remove loading class
@@ -385,12 +484,17 @@ function setCreatePlanLoading(button, isLoading) {
         button.style.pointerEvents = '';
         // Restore original text
         button.textContent = button.dataset.originalText || 'Create My Plan';
+        hidePlanLoadingOverlay();
     }
 }
 
 // Export for use in other contexts if needed
 window.FitPlanButtons = window.FitPlanButtons || {};
 window.FitPlanButtons.setCreatePlanLoading = setCreatePlanLoading;
+window.FitPlanOverlay = {
+    show: showPlanLoadingOverlay,
+    hide: hidePlanLoadingOverlay
+};
 // Form submission with loading states
 document.addEventListener('submit', function(e) {
     const submitBtn = e.target.querySelector('button[type="submit"], .btn-next');
