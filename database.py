@@ -9,9 +9,15 @@ from sqlalchemy.ext.declarative import declarative_base
 from dotenv import load_dotenv
 from db_schema import DATABASE_SCHEMA
 from urllib.parse import quote_plus, urlencode, urlparse, urlunparse, parse_qsl
+import logging
 
 # Load environment variables
 load_dotenv()
+
+# Set up logger
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Database URL from environment
 DATABASE_URL = os.getenv(
@@ -22,7 +28,10 @@ DATABASE_URL = os.getenv(
 def get_db_creds():
     # Local path: one JSON env var
     js = os.getenv("DATABASE_SECRET_JSON")
+    
     if js:
+        logger.info("Loading database credentials from JSON environment variable.")
+        logger.info(f"DATABASE_SECRET_JSON: {js}")
         return json.loads(js)
 
     # AWS path: fetch secret by ARN

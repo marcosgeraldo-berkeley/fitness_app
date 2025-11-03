@@ -1341,6 +1341,14 @@ def meals_page():
         raw_meal_data = meal_plan.plan_data
 
         logger.info(f"Raw meal data for user {session['user_id']}: {raw_meal_data}")
+
+        # Make sure raw_meal_data is a dictionary rather than a string
+        if isinstance(raw_meal_data, str):
+            try:
+                raw_meal_data = json.loads(raw_meal_data)
+            except json.JSONDecodeError:
+                flash('Error loading meal plan data.', 'error')
+                return redirect(url_for('profile_summary'))
         
         # Format for display with actual dates
         formatted_meal_data = meal_api.format_for_display(raw_meal_data, monday)
