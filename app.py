@@ -6,6 +6,8 @@ import os
 import logging
 import hashlib
 import json
+import threading
+import time
 from datetime import datetime, timedelta
 from services.meal_api_client import MealPlanningAPI, MealPlanningAPIError
 from flask import Flask, render_template, request, redirect, url_for, session, jsonify, flash, make_response
@@ -22,6 +24,8 @@ load_dotenv()
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'your-secret-key-here')  # Use env var in production
+API_STATUS_CHECK_SECONDS = max(1, int(os.environ.get('MEAL_API_STATUS_INTERVAL', 5)))
+app.config.setdefault('MEAL_API_AVAILABLE', True)
 
 # ====================HELPER TO HANDLE SERIAL DECIMALS IN POSTGRES ====
 
@@ -277,6 +281,54 @@ ensure_database_schema()
 
 # Initialize meal API client 
 meal_api = MealPlanningAPI()
+
+_api_monitor_started = False
+
+
+def start_meal_api_status_monitor():
+    """Launch a background thread that keeps track of the meal API availability."""
+    global _api_monitor_started
+    if _api_monitor_started:
+        return
+
+    def _monitor():
+        last_status = None
+        while True:
+            try:
+                available = bool(meal_api.health_check())
+            except Exception as exc:
+                logger.error(f"Error checking meal API health: {exc}")
+                available = False
+
+            app.config['MEAL_API_AVAILABLE'] = available
+
+            if last_status is None or available != last_status:
+                status_label = "available" if available else "unavailable"
+                logger.info(f"Meal planning API status changed: {status_label}")
+                last_status = available
+
+            time.sleep(API_STATUS_CHECK_SECONDS)
+
+    monitor_thread = threading.Thread(
+        target=_monitor,
+        daemon=True,
+        name="MealAPIStatusMonitor"
+    )
+    monitor_thread.start()
+    _api_monitor_started = True
+
+
+start_meal_api_status_monitor()
+
+
+@app.context_processor
+def inject_service_status():
+    """Expose service availability flags to all templates."""
+    available = app.config.get('MEAL_API_AVAILABLE', True)
+    return {
+        'generation_services_down': not available,
+        'meal_api_available': available,
+    }
 
 # helper functions:
 
@@ -940,6 +992,10 @@ def create_plan():
     """Generate workout and meal plans for the user"""
     if 'user_id' not in session:
         return redirect(url_for('index'))
+
+    if not app.config.get('MEAL_API_AVAILABLE', True):
+        flash('Plan generation is currently unavailable. Please try again soon.', 'error')
+        return redirect(url_for('profile_summary'))
     
     user_id = session['user_id']
     
@@ -1099,6 +1155,11 @@ def regenerate_workout():
     """Regenerate workout plan for current user"""
     if 'user_id' not in session:
         return jsonify({"error": "Not authenticated"}), 401
+
+    if not app.config.get('MEAL_API_AVAILABLE', True):
+        return jsonify({
+            "error": "Plan generation services are currently unavailable. Please try again later."
+        }), 503
     
     db = get_db()
     try:
@@ -1135,6 +1196,11 @@ def regenerate_meal_plan():
     """Regenerate meal plan for current user"""
     if 'user_id' not in session:
         return jsonify({"error": "Not authenticated"}), 401
+
+    if not app.config.get('MEAL_API_AVAILABLE', True):
+        return jsonify({
+            "error": "Plan generation services are currently unavailable. Please try again later."
+        }), 503
     
     db = get_db()
     try:
@@ -1211,6 +1277,13 @@ def regenerate_meal_plan():
         }), 500
     finally:
         close_db()
+
+
+@app.route('/api/service-status')
+def service_status_api():
+    """Expose the current availability of generation services."""
+    available = bool(app.config.get('MEAL_API_AVAILABLE', True))
+    return jsonify({"generation_available": available})
 
 
 @app.route('/dashboard')

@@ -19,6 +19,18 @@
                 </div>
             {% endif %}
         {% endwith %}
+
+        <div id="service-status-banner"
+             class="service-status-banner"
+             role="alert"
+             data-service-down="{{ 'true' if generation_services_down else 'false' }}"
+             {% if not generation_services_down %}hidden aria-hidden="true"{% else %}aria-hidden="false"{% endif %}>
+            <span class="service-status-icon" aria-hidden="true">⚠️</span>
+            <div class="service-status-message">
+                <strong>Plan generation temporarily unavailable.</strong>
+                <span>Please try again once our meal and workout services are back online.</span>
+            </div>
+        </div>
         
         <main class="main-content">
             {% block content %}{% endblock %}
@@ -32,6 +44,11 @@
             <div class="loading-subtext" id="loading-subtext">Hang tight while we personalize your workouts and meals.</div>
         </div>
     </div>
+
+    <script>
+        window.FitPlanServiceStatus = window.FitPlanServiceStatus || {};
+        window.FitPlanServiceStatus.down = {{ generation_services_down | tojson }};
+    </script>
     
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>
     {% block extra_js %}{% endblock %}

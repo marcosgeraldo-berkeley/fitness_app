@@ -138,8 +138,19 @@
                     </span>
                 </label>
             </div>
+
+            <div id="serviceUnavailableNote"
+                 class="service-unavailable-note"
+                 {% if not generation_services_down %}hidden{% endif %}>
+                Plan generation is temporarily unavailable. Please check back soon.
+            </div>
             
-            <button type="submit" class="btn-primary btn-create-plan" style="width: 100%;" id="createPlanBtn" disabled>
+            <button type="submit"
+                    class="btn-primary btn-create-plan"
+                    style="width: 100%;"
+                    id="createPlanBtn"
+                    {% if generation_services_down %}disabled{% endif %}
+                    data-service-down="{{ 'true' if generation_services_down else 'false' }}">
                 Create My Plan
             </button>
         </form>
@@ -241,6 +252,16 @@
     text-decoration: underline;
 }
 
+.service-unavailable-note {
+    font-size: 11px;
+    color: #92400e;
+    background: #fff4e5;
+    border: 1px solid #fcd9bd;
+    border-radius: 8px;
+    padding: 10px;
+    margin-bottom: 12px;
+}
+
 /* Disabled button state */
 .btn-create-plan:disabled {
     opacity: 0.5;
@@ -257,17 +278,4 @@
 
 {% block extra_js %}
 <script src="{{ url_for('static', filename='js/forms.js') }}"></script>
-<script>
-// Enable/disable Create Plan button based on privacy checkbox
-document.addEventListener('DOMContentLoaded', function() {
-    const privacyCheckbox = document.getElementById('privacyAccept');
-    const createPlanBtn = document.getElementById('createPlanBtn');
-    
-    if (privacyCheckbox && createPlanBtn) {
-        privacyCheckbox.addEventListener('change', function() {
-            createPlanBtn.disabled = !this.checked;
-        });
-    }
-});
-</script>
 {% endblock %}

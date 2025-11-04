@@ -1,5 +1,10 @@
 // Main JavaScript functionality for FitPlan app
 
+const SERVICE_STATUS_ENDPOINT = '/api/service-status';
+const SERVICE_STATUS_POLL_INTERVAL_MS = 5000;
+let serviceStatusDown = false;
+let serviceStatusTimerId = null;
+
 document.addEventListener('DOMContentLoaded', function() {
     // Flash message auto-hide
     const flashMessages = document.querySelectorAll('.flash-message');
@@ -60,6 +65,8 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     });
+
+    initializeServiceStatusBanner();
 });
 
 // Utility functions
@@ -144,6 +151,101 @@ function getFormProgress(step) {
 
 function clearFormProgress() {
     localStorage.removeItem('fitplan_progress');
+}
+
+function initializeServiceStatusBanner() {
+    const banner = document.getElementById('service-status-banner');
+    if (!banner) {
+        return;
+    }
+
+    const phoneFrame = document.querySelector('.phone-frame');
+    if (phoneFrame && !phoneFrame.contains(banner)) {
+        phoneFrame.insertAdjacentElement('afterbegin', banner);
+    }
+
+    let initialDown = banner.dataset.serviceDown === 'true';
+    if (window.FitPlanServiceStatus && typeof window.FitPlanServiceStatus.down === 'boolean') {
+        initialDown = window.FitPlanServiceStatus.down;
+    } else {
+        window.FitPlanServiceStatus = window.FitPlanServiceStatus || {};
+        window.FitPlanServiceStatus.down = initialDown;
+    }
+
+    banner.dataset.serviceDown = initialDown ? 'true' : 'false';
+    serviceStatusDown = initialDown;
+    applyServiceStatusToBanner(banner, initialDown, { force: true });
+    dispatchServiceStatus(initialDown, { force: true });
+    scheduleServiceStatusPoll();
+}
+
+function applyServiceStatusToBanner(banner, isDown, { force = false } = {}) {
+    if (!force && banner.dataset.serviceDown === (isDown ? 'true' : 'false')) {
+        return;
+    }
+
+    banner.dataset.serviceDown = isDown ? 'true' : 'false';
+    if (isDown) {
+        banner.hidden = false;
+        banner.setAttribute('aria-hidden', 'false');
+        banner.style.display = 'flex';
+    } else {
+        banner.hidden = true;
+        banner.setAttribute('aria-hidden', 'true');
+        banner.style.display = 'none';
+    }
+}
+
+function scheduleServiceStatusPoll() {
+    if (serviceStatusTimerId) {
+        window.clearTimeout(serviceStatusTimerId);
+    }
+
+    serviceStatusTimerId = window.setTimeout(pollServiceStatus, SERVICE_STATUS_POLL_INTERVAL_MS);
+}
+
+function pollServiceStatus() {
+    fetch(SERVICE_STATUS_ENDPOINT, { cache: 'no-store' })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Failed to fetch service status');
+            }
+            return response.json();
+        })
+        .then(data => {
+            const available = !!(data && data.generation_available);
+            updateServiceStatus(!available);
+        })
+        .catch(() => {
+            updateServiceStatus(true);
+        })
+        .finally(() => {
+            scheduleServiceStatusPoll();
+        });
+}
+
+function updateServiceStatus(isDown, { force = false } = {}) {
+    if (!force && serviceStatusDown === isDown) {
+        return;
+    }
+
+    serviceStatusDown = isDown;
+    window.FitPlanServiceStatus = window.FitPlanServiceStatus || {};
+    window.FitPlanServiceStatus.down = isDown;
+
+    const banner = document.getElementById('service-status-banner');
+    if (banner) {
+        applyServiceStatusToBanner(banner, isDown, { force: true });
+    }
+
+    dispatchServiceStatus(isDown, { force: true });
+}
+
+function dispatchServiceStatus(isDown, { force = false } = {}) {
+    const event = new CustomEvent('fitplan:service-status', {
+        detail: { down: isDown, force }
+    });
+    window.dispatchEvent(event);
 }
 
 // Export functions for use in other files

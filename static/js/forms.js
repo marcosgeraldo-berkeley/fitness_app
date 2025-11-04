@@ -41,6 +41,13 @@ const planLoadingPhrases = [
 let planLoadingIntervalId = null;
 let planLoadingStep = 0;
 const PLAN_LOADING_CHANGE_MS = 4000;
+const SERVICE_STATUS_POLL_EVENT = 'fitplan:service-status';
+
+const createPlanControls = {
+    button: null,
+    checkbox: null,
+    form: null,
+};
 
 function updatePlanLoadingOverlay() {
     const overlay = document.getElementById('loading-overlay');
@@ -106,6 +113,15 @@ document.addEventListener('DOMContentLoaded', function() {
     initializeFormValidation();
     initializeProgressSaving();
     initializeCreatePlanButton(); // ADD THIS LINE
+
+    // Sync create plan button state with current service status
+    const initialServiceDown = !!(window.FitPlanServiceStatus && window.FitPlanServiceStatus.down);
+    updateCreatePlanAvailability(initialServiceDown, { force: true });
+
+    window.addEventListener(SERVICE_STATUS_POLL_EVENT, (event) => {
+        const isDown = !!(event.detail && event.detail.down);
+        updateCreatePlanAvailability(isDown);
+    });
 });
 
 // Validate height inputs
@@ -451,18 +467,45 @@ function debounce(func, wait) {
 // Create Plan Button Loading State
 function initializeCreatePlanButton() {
     const createPlanForm = document.getElementById('createPlanForm');
-    const createPlanButton = document.querySelector('.btn-create-plan');
-    
+    const createPlanButton = document.getElementById('createPlanBtn') || document.querySelector('.btn-create-plan');
+    const privacyCheckbox = document.getElementById('privacyAccept');
+
+    if (createPlanButton) {
+        createPlanControls.button = createPlanButton;
+        createPlanControls.checkbox = privacyCheckbox;
+    }
+
     if (createPlanForm && createPlanButton) {
+        createPlanControls.form = createPlanForm;
+
         createPlanForm.addEventListener('submit', function(e) {
-            // Don't prevent default - let form submit
-            // Just add loading state to button
+            if (createPlanButton.dataset.serviceDown === 'true') {
+                e.preventDefault();
+                if (window.FitPlan && typeof window.FitPlan.showError === 'function') {
+                    window.FitPlan.showError('Plan generation services are currently unavailable. Please try again later.');
+                }
+                return;
+            }
+
+            // Don't prevent default - let form submit; just add loading state
             setCreatePlanLoading(createPlanButton, true);
         });
     }
+
+    if (createPlanButton && privacyCheckbox) {
+        privacyCheckbox.addEventListener('change', function() {
+            syncCreatePlanButtonState();
+        });
+    }
+
+    syncCreatePlanButtonState();
 }
 
 function setCreatePlanLoading(button, isLoading) {
+    if (!button || button.dataset.serviceDown === 'true') {
+        return;
+    }
+
     if (isLoading) {
         // Store original text
         button.dataset.originalText = button.textContent;
@@ -517,4 +560,52 @@ if (window.location.pathname.includes('dashboard')) {
     if (window.FitPlan) {
         window.FitPlan.clearFormProgress();
     }
+}
+
+function syncCreatePlanButtonState() {
+    const { button, checkbox } = createPlanControls;
+    if (!button) {
+        return;
+    }
+
+    const serviceDown = button.dataset.serviceDown === 'true';
+
+    if (serviceDown) {
+        button.disabled = true;
+        button.style.pointerEvents = 'none';
+        if (checkbox) {
+            checkbox.disabled = true;
+        }
+        hidePlanLoadingOverlay();
+        return;
+    }
+
+    button.style.pointerEvents = '';
+    if (checkbox) {
+        checkbox.disabled = false;
+        button.disabled = !checkbox.checked;
+    } else {
+        button.disabled = false;
+    }
+}
+
+function updateCreatePlanAvailability(isDown, { force = false } = {}) {
+    const { button } = createPlanControls;
+    const note = document.getElementById('serviceUnavailableNote');
+
+    if (note) {
+        note.hidden = !isDown;
+    }
+
+    if (!button) {
+        return;
+    }
+
+    const current = button.dataset.serviceDown === 'true';
+    if (!force && current === isDown) {
+        return;
+    }
+
+    button.dataset.serviceDown = isDown ? 'true' : 'false';
+    syncCreatePlanButtonState();
 }

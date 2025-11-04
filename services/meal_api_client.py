@@ -145,10 +145,8 @@ class MealPlanningAPI:
         """
         try:
             # Try a simple GET to the base URL or health endpoint
-            response = requests.get(
-                self.base_url,
-                timeout=5
-            )
+            status_url = f"{self.base_url.rstrip('/')}/status"
+            response = requests.get(status_url, timeout=5)
             return response.status_code in [200, 404]  # 404 is ok, means server is up
         except:
             return False
