@@ -12,18 +12,30 @@ from urllib.parse import quote_plus, urlencode, urlparse, urlunparse, parse_qsl
 import logging
 
 # Load environment variables
-load_dotenv()
+load_dotenv(override=True)
 
 # Set up logger
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+logger.info(f"IS_DOCKER:{os.environ.get('IS_DOCKER')}")
+
 # Database URL from environment
+if os.environ.get('IS_DOCKER')=='true':
+    db_host = 'postgres'
+else:
+    db_host = 'localhost'
+
+logger.info(f"DB Host:{db_host}")
+
+
 DATABASE_URL = os.getenv(
     'DATABASE_URL',
-    'postgresql://fitplan_user:fitplan_pass@localhost:5432/fitplan_db'
+    f"postgresql://fitplan_user:fitplan2025@{db_host}:5432/fitplan_db"
 )
+
+
 
 def get_db_creds():
     # Local path: one JSON env var
@@ -37,13 +49,15 @@ def get_db_creds():
     # AWS path: fetch secret by ARN
     arn = os.getenv("DATABASE_SECRET_ARN")
     if arn:
+        logger.info("Loading database credentials from ARN")
         return json.loads(arn)
 
     # Fallback: read split vars (useful for quick tests)
+    logger.info("Loading database credentials from env vars.")
     return {
         "username": os.getenv("POSTGRES_USER", "fitplan_user"),
-        "password": os.getenv("POSTGRES_PASSWORD", "fitplan_pass"),
-        "host": os.getenv("POSTGRES_HOST", "postgres"),
+        "password": os.getenv("POSTGRES_PASSWORD", "fitplan2025"),
+        "host": os.getenv("POSTGRES_HOST", db_host),
         "port": int(os.getenv("POSTGRES_PORT", "5432")),
         "dbname": os.getenv("POSTGRES_DB", "fitplan_db"),
     }
@@ -57,9 +71,12 @@ creds = get_db_creds()
 # creds from your existing get_db_creds()
 user = quote_plus(creds["username"])       # quote in case of special chars
 pwd  = quote_plus(creds["password"])
-host = creds["host"]; port = creds["port"]; db = creds["dbname"]
+host = creds["host"]; 
+port = creds["port"]; 
+db = creds["dbname"]
 
-base_url = f"postgresql+psycopg2://{user}:{pwd}@{host}:{port}/{db}"
+base_url = f"postgresql://{user}:{pwd}@{host}:{port}/{db}"
+logger.info(f"base url:{base_url}")
 
 # Decide whether to require SSL
 # - If DATABASE_SECRET_ARN is present, assume production and require SSL
@@ -82,7 +99,7 @@ engine = create_engine(
     max_overflow=20,
     pool_pre_ping=True,  # Verify connections before using
     connect_args=connection_args,
-    echo=False  # Set to True for SQL query logging
+    echo=True  # Set to True for SQL query logging
 )
 
 
@@ -112,7 +129,11 @@ def get_db():
 def init_db():
     """Initialize database tables"""
     with engine.begin() as connection:
+        logger.info(f"Connection:{connection}")
         for table_name, definition in DATABASE_SCHEMA.items():
+            logger.info(f"table:{table_name}")
+            logger.info(f"definition:{definition['create']}")
+
             connection.execute(text(definition["create"]))
             for column_sql in definition.get("columns", {}).values():
                 connection.execute(text(column_sql))

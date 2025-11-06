@@ -33,8 +33,8 @@ def get_db_creds():
     # Fallback: read split vars (useful for quick tests)
     return {
         "username": os.getenv("POSTGRES_USER", "fitplan_user"),
-        "password": os.getenv("POSTGRES_PASSWORD", "fitplan_pass"),
-        "host": os.getenv("POSTGRES_HOST", "postgres"),
+        "password": os.getenv("POSTGRES_PASSWORD", "fitplan2025"),
+        "host": os.getenv("POSTGRES_HOST", "localhost"),
         "port": int(os.getenv("POSTGRES_PORT", "5432")),
         "dbname": os.getenv("POSTGRES_DB", "fitplan_db"),
     }

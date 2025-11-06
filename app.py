@@ -18,7 +18,7 @@ from decimal import Decimal
 import requests
 
 # Load environment variables FIRST
-load_dotenv()
+load_dotenv(override=True)
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'your-secret-key-here')  # Use env var in production

@@ -12,6 +12,7 @@ dependencies:
   - numpy
   - pandas  
   - scikit-learn
+  - sqlalchemy
   # - openai
   # - langchain
   # - chromadb
