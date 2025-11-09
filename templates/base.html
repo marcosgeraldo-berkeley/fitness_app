@@ -24,7 +24,9 @@
              class="service-status-banner"
              role="alert"
              data-service-down="{{ 'true' if generation_services_down else 'false' }}"
-             {% if not generation_services_down %}hidden aria-hidden="true"{% else %}aria-hidden="false"{% endif %}>
+             hidden
+             aria-hidden="true"
+             style="display: none;">
             <span class="service-status-icon" aria-hidden="true">⚠️</span>
             <div class="service-status-message">
                 <strong>Plan generation temporarily unavailable.</strong>
