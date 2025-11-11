@@ -128,22 +128,27 @@ function smoothScrollTo(element) {
     }
 }
 
-// Local storage helpers (for temporary data)
+// Session storage helpers (for temporary data)
 function saveFormProgress(step, data) {
-    const progressKey = 'fitplan_progress';
-    const existing = JSON.parse(localStorage.getItem(progressKey) || '{}');
+    const userId = document.body.dataset.userId || 'guest';
+    // const progressKey = 'fitplan_progress';
+    const progressKey = `fitplan_progress_${userId}`;
+    const existing = JSON.parse(sessionStorage.getItem(progressKey) || '{}');
     existing[step] = data;
-    localStorage.setItem(progressKey, JSON.stringify(existing));
+    sessionStorage.setItem(progressKey, JSON.stringify(existing));
 }
 
 function getFormProgress(step) {
-    const progressKey = 'fitplan_progress';
-    const existing = JSON.parse(localStorage.getItem(progressKey) || '{}');
+    const userId = document.body.dataset.userId || 'guest';
+    const progressKey = `fitplan_progress_${userId}`;
+    const existing = JSON.parse(sessionStorage.getItem(progressKey) || '{}');
     return existing[step] || {};
 }
 
 function clearFormProgress() {
-    localStorage.removeItem('fitplan_progress');
+    const userId = document.body.dataset.userId || 'guest';
+    const progressKey = `fitplan_progress_${userId}`;
+    sessionStorage.removeItem(progressKey);
 }
 
 // Export functions for use in other files

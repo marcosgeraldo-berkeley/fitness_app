@@ -5,9 +5,8 @@
 {% block content %}
 <div class="phone-frame">
     <div class="app-header">
-        <div class="app-logo">F</div>
-        <div class="app-name">FitPlan</div>
-        <div class="app-tagline">Your all-in-one health companion</div>
+        <div class="welcome-logo"><img src="{{ url_for('static', filename='images/logo.png') }}" alt="MacroMind Logo"></div>
+        <div class="app-tagline">Your all-in-one fitness companion</div>
     </div>
     
     <div class="scrollable-content">
@@ -22,7 +21,7 @@
                 <input type="password" name="password" class="form-input" placeholder="Enter your password" required>
             </div>
             
-            <button type="submit" class="btn-primary">Log In</button>
+            <button type="submit" class="btn-primary" style="width: 100%; margin-top: 10px;">Log In</button>
         </form>
         
         <a href="{{ url_for('signup') }}">
@@ -30,9 +29,9 @@
         </a>
     </div>
     
-    <div class="link-text">
+    <!-- <div class="link-text">
         <a href="#">Forgot password?</a>
-    </div>
+    </div> -->
 </div>
 {% endblock %}
 

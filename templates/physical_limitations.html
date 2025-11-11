@@ -16,7 +16,8 @@
         <form method="POST" action="{{ url_for('save_physical_limitations') }}" id="limitationsForm" autocomplete="off">
             <div class="goal-options">
                 <label class="goal-option multi-select" for="chest-shoulder">
-                    <input type="checkbox" name="physical_limitations" value="chest and shoulder issues" id="chest-shoulder">
+                    <input type="checkbox" name="physical_limitations" value="chest and shoulder issues" id="chest-shoulder"
+                           {% if user and user.physical_limitations and 'chest and shoulder issues' in user.physical_limitations %}checked{% endif %}>
                     <div class="goal-icon">💪</div>
                     <div class="goal-text">
                         <div class="goal-title">Chest & Shoulder Issues</div>
@@ -25,7 +26,8 @@
                 </label>
                 
                 <label class="goal-option multi-select" for="back-spinal">
-                    <input type="checkbox" name="physical_limitations" value="back and spinal issues" id="back-spinal">
+                    <input type="checkbox" name="physical_limitations" value="back and spinal issues" id="back-spinal"
+                           {% if user and user.physical_limitations and 'back and spinal issues' in user.physical_limitations %}checked{% endif %}>
                     <div class="goal-icon">🫃</div>
                     <div class="goal-text">
                         <div class="goal-title">Back & Spinal Issues</div>
@@ -34,7 +36,8 @@
                 </label>
                 
                 <label class="goal-option multi-select" for="arm-hand">
-                    <input type="checkbox" name="physical_limitations" value="arm and hand issues" id="arm-hand">
+                    <input type="checkbox" name="physical_limitations" value="arm and hand issues" id="arm-hand"
+                           {% if user and user.physical_limitations and 'arm and hand issues' in user.physical_limitations %}checked{% endif %}>
                     <div class="goal-icon">🤲</div>
                     <div class="goal-text">
                         <div class="goal-title">Arm & Hand Issues</div>
@@ -43,7 +46,8 @@
                 </label>
                 
                 <label class="goal-option multi-select" for="hip-lumbar">
-                    <input type="checkbox" name="physical_limitations" value="hip or lumbar issues" id="hip-lumbar">
+                    <input type="checkbox" name="physical_limitations" value="hip or lumbar issues" id="hip-lumbar"
+                           {% if user and user.physical_limitations and 'hip or lumbar issues' in user.physical_limitations %}checked{% endif %}>
                     <div class="goal-icon">🦴</div>
                     <div class="goal-text">
                         <div class="goal-title">Hip or Lumbar Issues</div>
@@ -52,7 +56,8 @@
                 </label>
                 
                 <label class="goal-option multi-select" for="knee-foot">
-                    <input type="checkbox" name="physical_limitations" value="knee and foot issues" id="knee-foot">
+                    <input type="checkbox" name="physical_limitations" value="knee and foot issues" id="knee-foot"
+                           {% if user and user.physical_limitations and 'knee and foot issues' in user.physical_limitations %}checked{% endif %}>
                     <div class="goal-icon">🦵</div>
                     <div class="goal-text">
                         <div class="goal-title">Knee & Foot Issues</div>
@@ -61,7 +66,8 @@
                 </label>
                 
                 <label class="goal-option multi-select" for="cardiovascular">
-                    <input type="checkbox" name="physical_limitations" value="cardiovascular issues" id="cardiovascular">
+                    <input type="checkbox" name="physical_limitations" value="cardiovascular issues" id="cardiovascular"
+                           {% if user and user.physical_limitations and 'cardiovascular issues' in user.physical_limitations %}checked{% endif %}>
                     <div class="goal-icon">❤️</div>
                     <div class="goal-text">
                         <div class="goal-title">Cardiovascular Issues</div>
@@ -70,7 +76,8 @@
                 </label>
                 
                 <label class="goal-option multi-select" for="pregnancy">
-                    <input type="checkbox" name="physical_limitations" value="Pregnancy" id="pregnancy">
+                    <input type="checkbox" name="physical_limitations" value="Pregnancy" id="pregnancy"
+                           {% if user and user.physical_limitations and 'Pregnancy' in user.physical_limitations %}checked{% endif %}>
                     <div class="goal-icon">🤰</div>
                     <div class="goal-text">
                         <div class="goal-title">Pregnancy</div>
@@ -79,7 +86,8 @@
                 </label>
                 
                 <label class="goal-option multi-select" for="chronic-neuro">
-                    <input type="checkbox" name="physical_limitations" value="chronical or neurological issues" id="chronic-neuro">
+                    <input type="checkbox" name="physical_limitations" value="chronical or neurological issues" id="chronic-neuro"
+                           {% if user and user.physical_limitations and 'chronical or neurological issues' in user.physical_limitations %}checked{% endif %}>
                     <div class="goal-icon">🧠</div>
                     <div class="goal-text">
                         <div class="goal-title">Chronic or Neurological</div>
@@ -88,7 +96,8 @@
                 </label>
                 
                 <label class="goal-option multi-select" for="no-limitations">
-                    <input type="checkbox" name="physical_limitations" value="none" id="no-limitations">
+                    <input type="checkbox" name="physical_limitations" value="none" id="no-limitations"
+                           {% if user and user.physical_limitations and 'none' in user.physical_limitations %}checked{% endif %}>
                     <div class="goal-icon">✅</div>
                     <div class="goal-text">
                         <div class="goal-title">None</div>

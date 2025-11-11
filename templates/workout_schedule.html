@@ -16,7 +16,7 @@
         <form method="POST" action="{{ url_for('save_workout_schedule') }}" id="workoutScheduleForm" autocomplete="off">
             <div class="goal-options">
                 <label class="goal-option" for="casual">
-                    <input type="radio" name="workout_schedule" value="1" id="casual" required>
+                    <input type="radio" name="workout_schedule" value="1" id="casual" required {% if user and user.workout_schedule == '1' %}checked{% endif %}>
                     <div class="goal-icon">🌱</div>
                     <div class="goal-text">
                         <div class="goal-title">1-2 days</div>
@@ -25,7 +25,7 @@
                 </label>
                 
                 <label class="goal-option" for="engaged">
-                    <input type="radio" name="workout_schedule" value="3" id="engaged">
+                    <input type="radio" name="workout_schedule" value="3" id="engaged" {% if user and user.workout_schedule == '3' %}checked{% endif %}>
                     <div class="goal-icon">🔥</div>
                     <div class="goal-text">
                         <div class="goal-title">3-4 days</div>
@@ -34,7 +34,7 @@
                 </label>
                 
                 <label class="goal-option" for="committed">
-                    <input type="radio" name="workout_schedule" value="5" id="committed">
+                    <input type="radio" name="workout_schedule" value="5" id="committed" {% if user and user.workout_schedule == '5' %}checked{% endif %}>
                     <div class="goal-icon">💪</div>
                     <div class="goal-text">
                         <div class="goal-title">5-6 days</div>
@@ -43,7 +43,7 @@
                 </label>
                 
                 <label class="goal-option" for="obsessed">
-                    <input type="radio" name="workout_schedule" value="7" id="obsessed">
+                    <input type="radio" name="workout_schedule" value="7" id="obsessed" {% if user and user.workout_schedule == '7' %}checked{% endif %}>
                     <div class="goal-icon">⚡</div>
                     <div class="goal-text">
                         <div class="goal-title">Every day</div>

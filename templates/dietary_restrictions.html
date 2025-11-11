@@ -16,7 +16,8 @@
         <form method="POST" action="{{ url_for('save_dietary_restrictions') }}" id="dietaryForm" autocomplete="off">
             <div class="goal-options">
                 <label class="goal-option multi-select" for="vegetarian">
-                    <input type="checkbox" name="dietary_restrictions" value="vegetarian" id="vegetarian">
+                    <input type="checkbox" name="dietary_restrictions" value="vegetarian" id="vegetarian"
+                           {% if user and user.dietary_restrictions and 'vegetarian' in user.dietary_restrictions %}checked{% endif %}>
                     <div class="goal-icon">🥗</div>
                     <div class="goal-text">
                         <div class="goal-title">Vegetarian</div>
@@ -25,7 +26,8 @@
                 </label>
                 
                 <label class="goal-option multi-select" for="gluten-free">
-                    <input type="checkbox" name="dietary_restrictions" value="gluten-free" id="gluten-free">
+                    <input type="checkbox" name="dietary_restrictions" value="gluten-free" id="gluten-free"
+                           {% if user and user.dietary_restrictions and 'gluten-free' in user.dietary_restrictions %}checked{% endif %}>
                     <div class="goal-icon">🌱</div>
                     <div class="goal-text">
                         <div class="goal-title">Gluten-Free</div>
@@ -34,7 +36,8 @@
                 </label>
                 
                 <label class="goal-option multi-select" for="lactose-free">
-                    <input type="checkbox" name="dietary_restrictions" value="lactose-free" id="lactose-free">
+                    <input type="checkbox" name="dietary_restrictions" value="lactose-free" id="lactose-free"
+                           {% if user and user.dietary_restrictions and 'lactose-free' in user.dietary_restrictions %}checked{% endif %}>
                     <div class="goal-icon">🥛</div>
                     <div class="goal-text">
                         <div class="goal-title">Lactose-Free</div>
@@ -43,7 +46,8 @@
                 </label>
                 
                 <label class="goal-option multi-select" for="nut-allergy">
-                    <input type="checkbox" name="dietary_restrictions" value="nut-allergy" id="nut-allergy">
+                    <input type="checkbox" name="dietary_restrictions" value="nut-allergy" id="nut-allergy"
+                           {% if user and user.dietary_restrictions and 'nut-allergy' in user.dietary_restrictions %}checked{% endif %}>
                     <div class="goal-icon">🥜</div>
                     <div class="goal-text">
                         <div class="goal-title">Nut Allergy</div>
@@ -52,7 +56,8 @@
                 </label>
                 
                 <label class="goal-option multi-select" for="none">
-                    <input type="checkbox" name="dietary_restrictions" value="none" id="none">
+                    <input type="checkbox" name="dietary_restrictions" value="none" id="none"
+                           {% if user and user.dietary_restrictions and 'none' in user.dietary_restrictions %}checked{% endif %}>
                     <div class="goal-icon">✅</div>
                     <div class="goal-text">
                         <div class="goal-title">None</div>
