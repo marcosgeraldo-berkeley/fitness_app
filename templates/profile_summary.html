@@ -129,7 +129,11 @@
             <!-- Privacy Policy Checkbox -->
             <div class="privacy-checkbox-wrapper">
                 <label class="privacy-checkbox-label">
-                    <input type="checkbox" id="privacyAccept" name="privacy_accepted" required>
+                    <input type="checkbox" 
+                    id="privacyAccept" 
+                    name="privacy_accepted" 
+                    required 
+                    {% if user and user.privacy_accepted %}checked{% endif %}>
                     <span class="checkbox-custom"></span>
                     <span class="privacy-text">
                         I accept the 
@@ -139,7 +143,7 @@
                 </label>
             </div>
             
-            <button type="submit" class="btn-primary btn-create-plan" style="width: 100%;" id="createPlanBtn" disabled>
+            <button type="submit" class="btn-primary btn-create-plan" style="width: 100%;" id="createPlanBtn">
                 Create My Plan
             </button>
         </form>
@@ -264,9 +268,17 @@ document.addEventListener('DOMContentLoaded', function() {
     const createPlanBtn = document.getElementById('createPlanBtn');
     
     if (privacyCheckbox && createPlanBtn) {
-        privacyCheckbox.addEventListener('change', function() {
-            createPlanBtn.disabled = !this.checked;
-        });
+        // Function to update button state
+        function updateButtonState() {
+            createPlanBtn.disabled = !privacyCheckbox.checked;
+            console.log('Privacy checkbox:', privacyCheckbox.checked, '| Button disabled:', createPlanBtn.disabled);
+        }
+        
+        // Set initial state based on checkbox status
+        updateButtonState();
+        
+        // Update state when checkbox changes
+        privacyCheckbox.addEventListener('change', updateButtonState);
     }
 });
 </script>
