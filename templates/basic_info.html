@@ -11,19 +11,27 @@
     
     <div class="scrollable-content">
         <h3 style="font-size: 18px; margin-bottom: 10px; text-align: center;">How would you describe yourself?</h3>
-        <form method="POST" action="{{ url_for('save_basic_info') }}" id="basicInfoForm" autocomplete="off">
+        <form method="POST" action="{{ url_for('save_basic_info') }}" id="basicInfoForm" autocomplete="chrome-off">
             <div class="form-group">
                 <label class="form-label">Gender</label>
-                <select name="gender" class="form-input form-select" required>
+                <select name="gender" class="form-input form-select" required  autocomplete="chrome-off">
                     <option value="">Select gender</option>
-                    <option value="male">Male</option>
-                    <option value="female">Female</option>
+                    <option value="male" {% if user and user.gender == 'male' %}selected{% endif %}>Male</option>
+                    <option value="female" {% if user and user.gender == 'female' %}selected{% endif %}>Female</option>
                 </select>
             </div>
             
             <div class="form-group">
                 <label class="form-label">Age</label>
-                <input type="number" name="age" class="form-input" placeholder="Enter your age" min="13" max="120" required>
+                <input type="number" 
+                        name="age" 
+                        class="form-input" 
+                        placeholder="Enter your age" 
+                        min="13" 
+                        max="120" 
+                        required
+                        autocomplete="chrome-off" 
+                        value="{{ user.age if user and user.age else '' }}">
             </div>
             
             <div class="input-row">
@@ -31,10 +39,14 @@
                     <label class="form-label">Height</label>
                     <div class="height-inputs">
                         <input type="number" name="height_feet" class="form-input form-input-small" 
-                            placeholder="5" min="3" max="8" required>
+                            placeholder="5" min="3" max="8" required
+                            autocomplete="chrome-off"
+                            value="{{ user.height_feet if user and user.height_feet else '' }}">
                         <span class="input-separator">ft</span>
                         <input type="number" name="height_inches" class="form-input form-input-small" 
-                            placeholder="10" min="0" max="11" required>
+                            placeholder="10" min="0" max="11" required
+                            autocomplete="chrome-off"
+                            value="{{ user.height_inches if user and user.height_inches else '' }}">
                         <span class="input-separator">in</span>
                     </div>
                 </div>
@@ -43,7 +55,9 @@
                     <label class="form-label">Weight</label>
                     <div class="weight-input">
                         <input type="number" name="weight_lbs" class="form-input" 
-                            placeholder="150" min="50" max="500" required>
+                            placeholder="150" min="50" max="500" required
+                            autocomplete="chrome-off"
+                            value="{{ user.weight if user and user.weight else '' }}">
                         <span class="input-unit">lbs</span>
                     </div>
                 </div>
@@ -58,6 +72,39 @@
         <button type="submit" form="basicInfoForm" class="btn-next">Next</button>
     </div>
 </div>
+<script>
+    // Clear browser autocomplete cache when page loads for new users
+    document.addEventListener('DOMContentLoaded', function() {
+        const form = document.getElementById('basicInfoForm');
+        
+        // Only clear if no user data is present (new user)
+        {% if not user or not user.age %}
+        // Clear all input fields
+        const inputs = form.querySelectorAll('input:not([type="hidden"])');
+        inputs.forEach(input => {
+            input.value = '';
+        });
+        
+        // Reset select elements
+        const selects = form.querySelectorAll('select');
+        selects.forEach(select => {
+            select.selectedIndex = 0;
+        });
+        {% endif %}
+        
+        // Prevent browser from suggesting previous values
+        form.setAttribute('autocomplete', 'off');
+        
+        // Additional protection: reset on page show (handles back/forward button)
+        window.addEventListener('pageshow', function(event) {
+            if (event.persisted) {
+                {% if not user or not user.age %}
+                form.reset();
+                {% endif %}
+            }
+        });
+    });
+</script>
 {% endblock %}
 
 {% block extra_js %}

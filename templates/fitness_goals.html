@@ -16,7 +16,7 @@
         <form method="POST" action="{{ url_for('save_fitness_goals') }}" id="fitnessGoalsForm" autocomplete="off">
             <div class="goal-options">
                 <label class="goal-option" for="weight-loss">
-                    <input type="radio" name="fitness_goal" value="weight-loss" id="weight-loss" required>
+                    <input type="radio" name="fitness_goal" value="weight-loss" id="weight-loss" required {% if user and user.fitness_goals == 'weight-loss' %}checked{% endif %}>
                     <div class="goal-icon">⚖️</div>
                     <div class="goal-text">
                         <div class="goal-title">Weight Loss</div>
@@ -25,7 +25,7 @@
                 </label>
                 
                 <label class="goal-option" for="strength">
-                    <input type="radio" name="fitness_goal" value="strength" id="strength">
+                    <input type="radio" name="fitness_goal" value="strength" id="strength" {% if user and user.fitness_goals == 'strength' %}checked{% endif %}>
                     <div class="goal-icon">🏋️</div>
                     <div class="goal-text">
                         <div class="goal-title">Strength</div>
@@ -34,7 +34,7 @@
                 </label>
                 
                 <label class="goal-option" for="muscle-building">
-                    <input type="radio" name="fitness_goal" value="muscle-building" id="muscle-building">
+                    <input type="radio" name="fitness_goal" value="muscle-building" id="muscle-building" {% if user and user.fitness_goals == 'muscle-building' %}checked{% endif %}>
                     <div class="goal-icon">💪</div>
                     <div class="goal-text">
                         <div class="goal-title">Muscle Building</div>
@@ -43,7 +43,7 @@
                 </label>
                 
                 <label class="goal-option" for="endurance">
-                    <input type="radio" name="fitness_goal" value="endurance" id="endurance">
+                    <input type="radio" name="fitness_goal" value="endurance" id="endurance" {% if user and user.fitness_goals == 'endurance' %}checked{% endif %}>
                     <div class="goal-icon">🏅</div>
                     <div class="goal-text">
                         <div class="goal-title">Endurance</div>
@@ -52,7 +52,7 @@
                 </label>
 
                 <label class="goal-option" for="general_fitness">
-                    <input type="radio" name="fitness_goal" value="general_fitness" id="general_fitness">
+                    <input type="radio" name="fitness_goal" value="general_fitness" id="general_fitness" {% if user and user.fitness_goals == 'general_fitness' %}checked{% endif %}>
                     <div class="goal-icon">🏃</div>
                     <div class="goal-text">
                         <div class="goal-title">General Fitness</div>
@@ -61,7 +61,7 @@
                 </label>
 
                 <label class="goal-option" for="maintenance">
-                    <input type="radio" name="fitness_goal" value="maintenance" id="maintenance">
+                    <input type="radio" name="fitness_goal" value="maintenance" id="maintenance" {% if user and user.fitness_goals == 'maintenance' %}checked{% endif %}>
                     <div class="goal-icon">🧘</div>
                     <div class="goal-text">
                         <div class="goal-title">Maintenance</div>

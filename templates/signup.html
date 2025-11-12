@@ -5,7 +5,7 @@
 {% block content %}
 <div class="phone-frame">
     <div class="app-header">
-        <div class="app-logo">F</div>
+        <div class="app-logo"><img src="{{ url_for('static', filename='images/logo.png') }}" alt="MacroMind Logo"></div>
         <div class="app-name">Create Account</div>
         <div class="app-tagline">Join thousands achieving their goals</div>
     </div>
@@ -33,7 +33,7 @@
                 <div class="error-message">Passwords do not match</div>
             </div>
             
-            <button type="submit" class="btn-primary">Create Account</button>
+            <button type="submit" class="btn-primary" style="width: 100%; margin-top: 10px;">Create Account</button>
         </form>
     </div>
     

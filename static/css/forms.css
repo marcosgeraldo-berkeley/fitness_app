@@ -5,7 +5,7 @@
 }
 
 .form-title {
-    font-size: 22px;
+    font-size: 20px;
     font-weight: bold;
     color: #333;
     margin-bottom: 8px;
@@ -19,7 +19,7 @@
 
 /* Form Styling */
 .form-group {
-    margin-bottom: 20px;
+    margin-bottom: 8px;
 }
 
 .form-label {
@@ -35,7 +35,7 @@
     padding: 12px 15px;
     border: 2px solid #e1e8ed;
     border-radius: 8px;
-    font-size: 16px;
+    font-size: 14px;
     background: #fafbfc;
     transition: all 0.3s ease;
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -211,7 +211,7 @@
 }
 
 .welcome-description {
-    font-size: 16px;
+    font-size: 14px;
     line-height: 1.6;
     color: #666;
     margin-bottom: 30px;
@@ -235,7 +235,7 @@
 }
 
 .intro-description {
-    font-size: 16px;
+    font-size: 14px;
     line-height: 1.6;
     color: #666;
     margin-bottom: 30px;

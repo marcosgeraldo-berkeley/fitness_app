@@ -11,6 +11,7 @@ import time
 from datetime import datetime, timedelta
 from services.meal_api_client import MealPlanningAPI, MealPlanningAPIError
 from flask import Flask, render_template, request, redirect, url_for, session, jsonify, flash, make_response
+from functools import wraps
 
 # PostgreSQL imports
 from database import get_db, close_db, init_db, get_engine
@@ -26,6 +27,19 @@ app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'your-secret-key-here')  # Use env var in production
 API_STATUS_CHECK_SECONDS = max(1, int(os.environ.get('MEAL_API_STATUS_INTERVAL', 5)))
 app.config.setdefault('MEAL_API_AVAILABLE', True)
+
+# ====================Security fix to clean cache between sessions ====
+
+def no_cache(view):
+    """Decorator to add no-cache headers to prevent browser caching of sensitive pages"""
+    @wraps(view)
+    def no_cache_view(*args, **kwargs):
+        response = make_response(view(*args, **kwargs))
+        response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, post-check=0, pre-check=0, max-age=0'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '-1'
+        return response
+    return no_cache_view
 
 # ====================HELPER TO HANDLE SERIAL DECIMALS IN POSTGRES ====
 
@@ -642,10 +656,12 @@ def index():
     return render_template('welcome.html')
 
 @app.route('/signup')
+@no_cache
 def signup():
     return render_template('signup.html')
 
 @app.route('/register', methods=['POST'])
+@no_cache
 def register():
     name = request.form['name']
     email = request.form['email']
@@ -700,18 +716,50 @@ def login():
         close_db()
 
 @app.route('/questionnaire-intro')
+@no_cache
 def questionnaire_intro():
     if 'user_id' not in session:
         return redirect(url_for('index'))
     return render_template('questionnaire_intro.html')
 
 @app.route('/basic-info')
+@no_cache
 def basic_info():
+     # DEBUG: Print session info
+    logger.info(f"Session user_id: {session.get('user_id')}")
+    logger.info(f"Session user_name: {session.get('user_name')}")
+    logger.info(f"Full session: {dict(session)}")
+    # END debug
     if 'user_id' not in session:
         return redirect(url_for('index'))
-    return render_template('basic_info.html')
+    db = get_db()
+    try:
+        # Get existing user data if any
+        result = db.execute(text('SELECT * FROM users WHERE id = :id'), {'id': session['user_id']})
+        user = result.fetchone()
+        # DEBUG: Print session info
+        logger.info(f"Fetched user_id: {session.get('user_id')}")
+        logger.info(f"Fetched user_name: {session.get('user_name')}")
+        logger.info(f"Fetched Full session: {dict(session)}")
+        logger.info(f"User: {user}")
+        
+        # END debug
+        
+        # Convert to dict for template
+        user_data = dict(user._mapping) if user else {}
+        
+        # Convert height back to feet and inches for display
+        if user_data.get('height'):
+            feet, inches = inches_to_feet_inches(user_data['height'])
+            user_data['height_feet'] = feet
+            user_data['height_inches'] = inches
+        
+        return render_template('basic_info.html', user=user_data)
+    finally:
+        close_db()
 
 @app.route('/save-basic-info', methods=['POST'])
+@no_cache
 def save_basic_info():
     if 'user_id' not in session:
         return redirect(url_for('index'))
@@ -742,12 +790,22 @@ def save_basic_info():
         close_db()
 
 @app.route('/activity-level')
+@no_cache
 def activity_level():
     if 'user_id' not in session:
-        return redirect(url_for('index'))
-    return render_template('activity_level.html')
+        return redirect(url_for('index'))   
+    db = get_db()
+    try:
+        result = db.execute(text('SELECT * FROM users WHERE id = :id'), {'id': session['user_id']})
+        user = result.fetchone()
+        user_data = dict(user._mapping) if user else {}
+
+        return render_template('activity_level.html', user=user_data)
+    finally:
+        close_db()
 
 @app.route('/save-activity-level', methods=['POST'])
+@no_cache
 def save_activity_level():
     if 'user_id' not in session:
         return redirect(url_for('index'))
@@ -773,12 +831,22 @@ def save_activity_level():
         close_db()
 
 @app.route('/fitness-goals')
+@no_cache
 def fitness_goals():
     if 'user_id' not in session:
         return redirect(url_for('index'))
-    return render_template('fitness_goals.html')
+    db = get_db()
+    try:
+        result = db.execute(text('SELECT * FROM users WHERE id = :id'), {'id': session['user_id']})
+        user = result.fetchone()
+        user_data = dict(user._mapping) if user else {}
+
+        return render_template('fitness_goals.html', user=user_data)
+    finally:
+        close_db()
 
 @app.route('/save-fitness-goals', methods=['POST'])
+@no_cache
 def save_fitness_goals():
     if 'user_id' not in session:
         return redirect(url_for('index'))
@@ -804,12 +872,21 @@ def save_fitness_goals():
         close_db()
 
 @app.route('/equipment-access')
+@no_cache
 def equipment_access():
     if 'user_id' not in session:
         return redirect(url_for('index'))
-    return render_template('equipment_access.html')
+    db = get_db()
+    try:
+        result = db.execute(text('SELECT * FROM users WHERE id = :id'), {'id': session['user_id']})
+        user = result.fetchone()
+        user_data = dict(user._mapping) if user else {}
+        return render_template('equipment_access.html', user=user_data)
+    finally:
+        close_db()
 
 @app.route('/save-equipment-access', methods=['POST'])
+@no_cache
 def save_equipment_access():
     if 'user_id' not in session:
         return redirect(url_for('index'))
@@ -833,12 +910,21 @@ def save_equipment_access():
         close_db()
 
 @app.route('/workout-schedule')
+@no_cache
 def workout_schedule():
     if 'user_id' not in session:
         return redirect(url_for('index'))
-    return render_template('workout_schedule.html')
+    db = get_db()
+    try:
+        result = db.execute(text('SELECT * FROM users WHERE id = :id'), {'id': session['user_id']})
+        user = result.fetchone()
+        user_data = dict(user._mapping) if user else {}
+        return render_template('workout_schedule.html', user=user_data)
+    finally:
+        close_db()
 
 @app.route('/save-workout-schedule', methods=['POST'])
+@no_cache
 def save_workout_schedule():
     if 'user_id' not in session:
         return redirect(url_for('index'))
@@ -861,12 +947,21 @@ def save_workout_schedule():
         close_db()
 
 @app.route('/physical-limitations')
+@no_cache
 def physical_limitations():
     if 'user_id' not in session:
         return redirect(url_for('index'))
-    return render_template('physical_limitations.html')
+    db = get_db()
+    try:
+        result = db.execute(text('SELECT * FROM users WHERE id = :id'), {'id': session['user_id']})
+        user = result.fetchone()
+        user_data = dict(user._mapping) if user else {}
+        return render_template('physical_limitations.html',user=user_data)
+    finally:
+        close_db()
 
 @app.route('/save-physical-limitations', methods=['POST'])
+@no_cache
 def save_physical_limitations():
     if 'user_id' not in session:
         return redirect(url_for('index'))
@@ -890,12 +985,21 @@ def save_physical_limitations():
         close_db()
 
 @app.route('/dietary-restrictions')
+@no_cache
 def dietary_restrictions():
     if 'user_id' not in session:
         return redirect(url_for('index'))
-    return render_template('dietary_restrictions.html')
+    db = get_db()
+    try:
+        result = db.execute(text('SELECT * FROM users WHERE id = :id'), {'id': session['user_id']})
+        user = result.fetchone()
+        user_data = dict(user._mapping) if user else {}
+        return render_template('dietary_restrictions.html', user=user_data)
+    finally:
+        close_db()
 
 @app.route('/save-dietary-restrictions', methods=['POST'])
+@no_cache
 def save_dietary_restrictions():
     if 'user_id' not in session:
         return redirect(url_for('index'))
@@ -919,6 +1023,7 @@ def save_dietary_restrictions():
         close_db()
 
 @app.route('/food-preferences')
+@no_cache
 def food_preferences():
     if 'user_id' not in session:
         return redirect(url_for('index'))
@@ -935,6 +1040,7 @@ def food_preferences():
         close_db()
 
 @app.route('/save-food-preferences', methods=['POST'])
+@no_cache
 def save_food_preferences():
     if 'user_id' not in session:
         return redirect(url_for('index'))
@@ -963,6 +1069,7 @@ def save_food_preferences():
         close_db()
 
 @app.route('/profile_summary')
+@no_cache
 def profile_summary():
     if 'user_id' not in session:
         return redirect(url_for('index'))
@@ -1475,7 +1582,7 @@ def grocery_page():
     finally:
         close_db()
 
-# Placeholder API endpoints for plan generation
+# API endpoints for plan generation
 @app.route('/api/generate-workout-plan', methods=['POST'])
 def generate_workout_plan():
     """Generate personalized workout plan using rule-based algorithm"""
@@ -1600,9 +1707,10 @@ def generate_grocery_list():
 def logout():
     session.clear()
     response = make_response(redirect(url_for('index')))
-    response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate, post-check=0, pre-check=0, max-age=0'
     response.headers['Pragma'] = 'no-cache'
     response.headers['Expires'] = '0'
+    
     return response
 
 if __name__ == '__main__':

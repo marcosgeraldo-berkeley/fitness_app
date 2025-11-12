@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 # Database URL from environment
 DATABASE_URL = os.getenv(
     'DATABASE_URL',
-    'postgresql://fitplan_user:fitplan_pass@localhost:5432/fitplan_db'
+    'postgresql://fitplan_user:fitplan_pass@postgres:5432/fitplan_db'
 )
 
 def get_db_creds():

@@ -16,7 +16,8 @@
         <form method="POST" action="{{ url_for('save_equipment_access') }}" id="equipmentForm" autocomplete="off">
             <div class="goal-options">
                 <label class="goal-option multi-select" for="no-equipment">
-                    <input type="checkbox" name="equipment" value="no-equipment" id="no-equipment">
+                    <input type="checkbox" name="equipment" value="no-equipment" id="no-equipment"
+                           {% if user and user.available_equipment and 'no-equipment' in user.available_equipment %}checked{% endif %}>
                     <div class="goal-icon">🏠</div>
                     <div class="goal-text">
                         <div class="goal-title">No Equipment</div>
@@ -25,7 +26,8 @@
                 </label>
                 
                 <label class="goal-option multi-select" for="dumbbells">
-                    <input type="checkbox" name="equipment" value="dumbbells" id="dumbbells">
+                    <input type="checkbox" name="equipment" value="dumbbells" id="dumbbells"
+                           {% if user and user.available_equipment and 'dumbbells' in user.available_equipment %}checked{% endif %}>
                     <div class="goal-icon">🏋️</div>
                     <div class="goal-text">
                         <div class="goal-title">Dumbbells</div>
@@ -34,7 +36,8 @@
                 </label>
                 
                 <label class="goal-option multi-select" for="resistance-bands">
-                    <input type="checkbox" name="equipment" value="resistance-bands" id="resistance-bands">
+                    <input type="checkbox" name="equipment" value="resistance-bands" id="resistance-bands"
+                           {% if user and user.available_equipment and 'resistance-bands' in user.available_equipment %}checked{% endif %}>
                     <div class="goal-icon">💪</div>
                     <div class="goal-text">
                         <div class="goal-title">Resistance Bands</div>
@@ -43,7 +46,8 @@
                 </label>
                 
                 <label class="goal-option multi-select" for="cardio-equipment">
-                    <input type="checkbox" name="equipment" value="cardio-equipment" id="cardio-equipment">
+                    <input type="checkbox" name="equipment" value="cardio-equipment" id="cardio-equipment"
+                           {% if user and user.available_equipment and 'cardio-equipment' in user.available_equipment %}checked{% endif %}>
                     <div class="goal-icon">🏃</div>
                     <div class="goal-text">
                         <div class="goal-title">Cardio Equipment</div>
@@ -52,7 +56,8 @@
                 </label>
                 
                 <label class="goal-option multi-select" for="full-gym">
-                    <input type="checkbox" name="equipment" value="full-gym" id="full-gym">
+                    <input type="checkbox" name="equipment" value="full-gym" id="full-gym"
+                           {% if user and user.available_equipment and 'full-gym' in user.available_equipment %}checked{% endif %}>
                     <div class="goal-icon">🏢</div>
                     <div class="goal-text">
                         <div class="goal-title">Full Gym Access</div>

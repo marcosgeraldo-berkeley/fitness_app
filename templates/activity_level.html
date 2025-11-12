@@ -18,7 +18,7 @@
         <form method="POST" action="{{ url_for('save_activity_level') }}" id="activityForm"  autocomplete="off">
             <div class="goal-options">
                 <label class="goal-option" for="sedentary">
-                    <input type="radio" name="activity_level" value="sedentary" id="sedentary" required>
+                    <input type="radio" name="activity_level" value="sedentary" id="sedentary" required {% if user and user.activity_level == 'sedentary' %}checked{% endif %}>
                     <div class="goal-icon">🛋️</div>
                     <div class="goal-text">
                         <div class="goal-title">Sedentary</div>
@@ -27,7 +27,7 @@
                 </label>
                 
                 <label class="goal-option" for="lightly_active">
-                    <input type="radio" name="activity_level" value="lightly_active" id="lightly_active">
+                    <input type="radio" name="activity_level" value="lightly_active" id="lightly_active" {% if user and user.activity_level == 'lightly_active' %}checked{% endif %}>
                     <div class="goal-icon">🚶</div>
                     <div class="goal-text">
                         <div class="goal-title">Lightly Active</div>
@@ -36,7 +36,7 @@
                 </label>
                 
                 <label class="goal-option" for="moderately_active">
-                    <input type="radio" name="activity_level" value="moderately_active" id="moderately_active">
+                    <input type="radio" name="activity_level" value="moderately_active" id="moderately_active" {% if user and user.activity_level == 'moderately_active' %}checked{% endif %}>
                     <div class="goal-icon">🏃</div>
                     <div class="goal-text">
                         <div class="goal-title">Moderately Active</div>
@@ -45,7 +45,7 @@
                 </label>
                 
                 <label class="goal-option" for="very_active">
-                    <input type="radio" name="activity_level" value="very_active" id="very_active">
+                    <input type="radio" name="activity_level" value="very_active" id="very_active" {% if user and user.activity_level == 'very_active' %}checked{% endif %}>
                     <div class="goal-icon">💪</div>
                     <div class="goal-text">
                         <div class="goal-title">Very Active</div>
@@ -54,7 +54,7 @@
                 </label>
                 
                 <label class="goal-option" for="extra_active">
-                    <input type="radio" name="activity_level" value="extra_active" id="extra_active">
+                    <input type="radio" name="activity_level" value="extra_active" id="extra_active" {% if user and user.activity_level == 'extra_active' %}checked{% endif %}>
                     <div class="goal-icon">🏋️</div>
                     <div class="goal-text">
                         <div class="goal-title">Extra Active</div>

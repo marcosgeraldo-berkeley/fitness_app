@@ -61,7 +61,7 @@ body {
 
 .app-header {
     text-align: center;
-    margin-bottom: 30px;
+    margin-bottom: 15px;
 }
 
 .app-logo {
@@ -78,6 +78,29 @@ body {
     font-weight: bold;
 }
 
+.app-logo img {
+    /* Make the image fill the container's width/height */
+    width: 100%;
+    height: 100%;
+    
+    /* Ensure the image scales down to fit the container without cropping or stretching */
+    object-fit: contain; 
+    
+    /* Optional: to make the image circular/rounded if desired */
+    /* border-radius: 50%; */ 
+}
+
+.welcome-logo img {
+    /* Make the image fill the container's width/height */
+    width: 75%;
+    height: 75%;
+    
+    /* Ensure the image scales down to fit the container without cropping or stretching */
+    object-fit: contain; 
+    
+    /* Optional: to make the image circular/rounded if desired */
+    border-radius: 10%; 
+}
 .app-name {
     font-size: 24px;
     font-weight: bold;
@@ -601,12 +624,12 @@ body {
 }
 
 .loading-emoji {
-    font-size: 48px;
+    font-size: 30px;
     animation: loading-bounce 1.4s ease-in-out infinite;
 }
 
 .loading-text {
-    font-size: 18px;
+    font-size: 14px;
     font-weight: 600;
     color: #1f2937;
 }

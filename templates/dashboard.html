@@ -9,8 +9,8 @@
 {% block content %}
 <div class="phone-frame">
     <div class="plan-header">
-        <div class="app-logo">F</div>
-        <div class="app-name">Welcome back, {{ user_name }}!</div>
+    <div class="app-logo"><img src="{{ url_for('static', filename='images/logo.png') }}" alt="MacroMind Logo"></div>        
+    <div class="app-name">Welcome back, {{ user_name }}!</div>
     </div>
     
     <!-- Nutrition Targets Section -->
@@ -132,17 +132,17 @@
         
         {% if not workout_plan and not first_day %}
         <div class="alert-box" style="margin-top: 20px;">
-            <p class="alert-text">💡 Complete your profile to generate your personalized plans</p>
+            <p class="alert-text">💡 No fitness plan for this week yet. Update your profile and create a new plan.</p>
         </div>
         {% endif %}
     </div>
     
     <div class="navigation">
         <a href="{{ url_for('profile_summary') }}">
-            <button class="btn-secondary">View Profile</button>
+            <button class="btn-primary" style="width: 180px; margin-top: 5px;">View Profile</button>
         </a>
         <a href="{{ url_for('logout') }}">
-            <button class="btn-primary">Logout</button>
+            <button class="btn-primary" style="width: 100px; margin-top: 5px;">Logout</button>
         </a>
     </div>
 </div>
