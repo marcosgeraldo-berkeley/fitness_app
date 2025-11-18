@@ -4,14 +4,71 @@
 
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+<style>
+.save-indicator {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: #4caf50;
+    color: white;
+    padding: 8px 16px;
+    border-radius: 4px;
+    font-size: 12px;
+    opacity: 0;
+    transition: opacity 0.3s;
+    z-index: 1000;
+}
+
+.save-indicator.show {
+    opacity: 1;
+}
+
+.save-indicator.saving {
+    background: #ff9800;
+}
+
+.save-indicator.error {
+    background: #f44336;
+}
+
+.grocery-item {
+    cursor: pointer;
+    transition: opacity 0.3s;
+}
+
+.grocery-item.checked {
+    opacity: 0.6;
+}
+
+.grocery-item.checked .grocery-item-name,
+.grocery-item.checked .grocery-item-quantity {
+    text-decoration: line-through;
+}
+
+.error-message {
+    background: #ffebee;
+    border-left: 4px solid #f44336;
+    padding: 15px;
+    border-radius: 8px;
+    margin-bottom: 15px;
+}
+
+.error-message p {
+    margin: 0;
+    font-size: 13px;
+    color: #c62828;
+}
+</style>
 {% endblock %}
 
 {% block content %}
+<div class="save-indicator" id="saveIndicator">Saved</div>
+
 <div class="phone-frame">
     <div class="plan-header">
         <div class="app-logo">🛒</div>
         <div class="app-name">Shopping List</div>
-        <div class="app-tagline">{{ grocery_list.week }} • Organized by aisle</div>
+        <div class="app-tagline">{{ grocery_list.week if grocery_list else 'No list' }} • Organized by aisle</div>
     </div>
     
     <div class="scrollable-content">
@@ -20,23 +77,32 @@
                 <div class="grocery-section">
                     <div class="grocery-section-title">
                         <span class="grocery-section-icon">{{ section.title.split(' ')[0] }}</span>
-                        {{ section.title.split(' ', 1)[1] }}
+                        {{ section.title.split(' ', 1)[1] if section.title.split(' ')|length > 1 else section.title }}
                     </div>
                     {% for item in section['items'] %}
-                        <div class="grocery-item" onclick="toggleGroceryItem(this)">
-                            <div class="grocery-item-name">{{ item['name'] }}</div>
-                            <div class="grocery-item-quantity">{{ item['quantity'] }}</div>
+                        <div class="grocery-item {% if item.get('checked') %}checked{% endif %}" 
+                             data-category="{{ section.title.split(' ', 1)[1] if section.title.split(' ')|length > 1 else section.title }}"
+                             data-name="{{ item['name'] }}"
+                             onclick="toggleGroceryItem(this)">
+                            <div>
+                                <div class="grocery-item-name">{{ item['name'] }}</div>
+                                <div class="grocery-item-quantity">
+                                    {{ "%.2f"|format(item['quantity']) if item['quantity'] is number else item['quantity'] }} 
+                                    {{ item.get('unit', '') }}
+                                </div>
+                            </div>
                         </div>
                     {% endfor %}
                 </div>
             {% endfor %}
             
             <div class="alert-box" style="margin-top: 15px;">
-                <p class="alert-text">💡 Tap items to check them off as you shop</p>
+                <p class="alert-text">💡 Tap items to check them off as you shop. Changes are saved automatically.</p>
             </div>
         {% else %}
-            <div class="empty-state">
-                <p>No grocery list available. Please complete your profile first.</p>
+            <div class="error-message">
+                <p><strong>No grocery list available.</strong></p>
+                <p>Please create a meal plan first to generate your shopping list.</p>
             </div>
         {% endif %}
     </div>
@@ -45,19 +111,129 @@
         <a href="{{ url_for('dashboard') }}">
             <button class="btn-secondary">← Back to Dashboard</button>
         </a>
-        {% if grocery_list %}
-            <!-- <button class="btn-primary" onclick="alert('Export list feature coming soon!')">Export List</button> -->
-        {% else %}
-            <a href="{{ url_for('basic_info') }}">
-                <button class="btn-primary">Complete Profile</button>
+        {% if not grocery_list %}
+            <a href="{{ url_for('profile_summary') }}">
+                <button class="btn-primary">Create Plan</button>
             </a>
         {% endif %}
     </div>
 </div>
 
 <script>
-function toggleGroceryItem(item) {
-    item.classList.toggle('checked');
+// Debounce timer for saving
+let saveTimer = null;
+const saveIndicator = document.getElementById('saveIndicator');
+
+// Pending updates queue
+let pendingUpdates = [];
+
+function showSaveIndicator(status = 'saved', message = 'Saved') {
+    saveIndicator.textContent = message;
+    saveIndicator.className = 'save-indicator show';
+    
+    if (status === 'saving') {
+        saveIndicator.classList.add('saving');
+    } else if (status === 'error') {
+        saveIndicator.classList.add('error');
+    }
+    
+    // Auto-hide after 2 seconds for non-saving states
+    if (status !== 'saving') {
+        setTimeout(() => {
+            saveIndicator.classList.remove('show');
+        }, 2000);
+    }
 }
+
+function hideSaveIndicator() {
+    saveIndicator.classList.remove('show');
+}
+
+function toggleGroceryItem(element) {
+    // Toggle visual state immediately
+    element.classList.toggle('checked');
+    
+    const category = element.dataset.category;
+    const name = element.dataset.name;
+    const isChecked = element.classList.contains('checked');
+    
+    // Add to pending updates
+    pendingUpdates.push({
+        category: category,
+        name: name,
+        checked: isChecked
+    });
+    
+    // Clear existing timer
+    if (saveTimer) {
+        clearTimeout(saveTimer);
+    }
+    
+    // Show "Saving..." indicator
+    showSaveIndicator('saving', 'Saving...');
+    
+    // Set new timer to save after 500ms of no changes
+    saveTimer = setTimeout(() => {
+        saveGroceryChanges();
+    }, 500);
+}
+
+async function saveGroceryChanges() {
+    if (pendingUpdates.length === 0) {
+        hideSaveIndicator();
+        return;
+    }
+    
+    // Take the last state of each item (most recent update)
+    const updatesToSave = {};
+    for (const update of pendingUpdates) {
+        const key = `${update.category}:${update.name}`;
+        updatesToSave[key] = update;
+    }
+    
+    // Clear pending updates
+    pendingUpdates = [];
+    
+    // Save each update
+    let allSuccessful = true;
+    for (const update of Object.values(updatesToSave)) {
+        try {
+            const response = await fetch('/api/update-grocery-item', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(update)
+            });
+            
+            if (!response.ok) {
+                const error = await response.json();
+                console.error('Failed to save item:', error);
+                allSuccessful = false;
+            }
+        } catch (error) {
+            console.error('Error saving item:', error);
+            allSuccessful = false;
+        }
+    }
+    
+    // Show appropriate feedback
+    if (allSuccessful) {
+        showSaveIndicator('saved', 'Saved ✓');
+    } else {
+        showSaveIndicator('error', 'Save failed');
+    }
+}
+
+// Save on page unload if there are pending changes
+window.addEventListener('beforeunload', (e) => {
+    if (pendingUpdates.length > 0) {
+        // Force immediate save
+        if (saveTimer) {
+            clearTimeout(saveTimer);
+        }
+        saveGroceryChanges();
+    }
+});
 </script>
 {% endblock %}

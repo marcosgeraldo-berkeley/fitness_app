@@ -51,9 +51,6 @@ class DecimalEncoder(json.JSONEncoder):
 
 # ====================INITIALIZE WORKOUT GENERATOR ====================
 from workout_generator import WorkoutGenerator
-# NOTE: exercises.db stays as SQLite (read-only reference database)
-# Only fitplan user data moves to PostgreSQL
-workout_generator = WorkoutGenerator(exercise_db='exercises.db')
 
 # ==================== METABOLIC CALCULATION FUNCTIONS ====================
 def inches_to_cm(inches):
@@ -360,104 +357,47 @@ def inject_service_status():
 
 def generate_grocery_list_from_meals(meal_plan):
     """
-    Generate grocery list from meal plan API response
+    Generate grocery list from meal plan using the API client
     
     Args:
         meal_plan: Raw response from meal planning API
     
     Returns:
-        dict: Grocery list organized by sections
+        dict: Grocery list organized by categories with checked status,
+              or sample data if API fails
     """
-    from collections import defaultdict
-    
     if not meal_plan or 'daily_plans' not in meal_plan:
+        logger.warning("No valid meal plan data for grocery list generation")
         return get_sample_grocery_data()
     
-    # Aggregate ingredients
-    ingredient_map = defaultdict(lambda: {
-        'quantities': [],
-        'units': [],
-        'meals': []
-    })
-    
-    for day in meal_plan.get('daily_plans', []):
-        for meal in day.get('meals', []):
-            if meal is None:
-                continue
-            
-            ingredients = meal.get('ingredients', [])
-            quantities = meal.get('quantities', [])
-            units = meal.get('units', [])
-            meal_title = meal.get('title', 'Unknown Meal')
-            
-            for i, ingredient in enumerate(ingredients):
-                qty = quantities[i] if i < len(quantities) else "1"
-                unit = units[i] if i < len(units) else "serving"
-                
-                ingredient_map[ingredient]['quantities'].append(qty)
-                ingredient_map[ingredient]['units'].append(unit)
-                ingredient_map[ingredient]['meals'].append(meal_title)
-    
-    # Organize into sections (simple categorization)
-    produce_keywords = ['lettuce', 'tomato', 'cucumber', 'onion', 'pepper', 'carrot', 
-                        'broccoli', 'spinach', 'kale', 'apple', 'banana', 'berry']
-    protein_keywords = ['chicken', 'beef', 'pork', 'fish', 'salmon', 'tuna', 
-                        'turkey', 'egg', 'tofu', 'tempeh']
-    dairy_keywords = ['milk', 'cheese', 'yogurt', 'butter', 'cream']
-    
-    produce_items = []
-    protein_items = []
-    dairy_items = []
-    pantry_items = []
-    
-    for ingredient, data in ingredient_map.items():
-        item = {
-            'name': ingredient,
-            'quantity': ', '.join(data['quantities'][:3])  # Show first 3 quantities
-        }
+    try:
+        # Use the API client to generate grocery list
+        grocery_api_response = meal_api.generate_grocery_list(meal_plan)
         
-        ingredient_lower = ingredient.lower()
+        if not grocery_api_response:
+            logger.warning("Grocery API call failed, using sample data")
+            return get_sample_grocery_data()
         
-        if any(kw in ingredient_lower for kw in produce_keywords):
-            produce_items.append(item)
-        elif any(kw in ingredient_lower for kw in protein_keywords):
-            protein_items.append(item)
-        elif any(kw in ingredient_lower for kw in dairy_keywords):
-            dairy_items.append(item)
-        else:
-            pantry_items.append(item)
+        # Format the API response for display
+        monday = get_monday_of_week()
+        grocery_data = meal_api.format_grocery_list_for_display(
+            grocery_api_response, 
+            monday
+        )
+        
+        if not grocery_data:
+            logger.warning("Failed to format grocery list, using sample data")
+            return get_sample_grocery_data()
+        
+        return grocery_data
+        
+    except MealPlanningAPIError as e:
+        logger.error(f"Grocery API validation error: {e}")
+        return get_sample_grocery_data()
     
-    # Build grocery data structure
-    grocery_data = {
-        'week': datetime.now().strftime("%B %d-%d"),
-        'sections': []
-    }
-    
-    if produce_items:
-        grocery_data['sections'].append({
-            'title': '🥬 Produce',
-            'items': sorted(produce_items, key=lambda x: x['name'])
-        })
-    
-    if protein_items:
-        grocery_data['sections'].append({
-            'title': '🥩 Protein',
-            'items': sorted(protein_items, key=lambda x: x['name'])
-        })
-    
-    if dairy_items:
-        grocery_data['sections'].append({
-            'title': '🥛 Dairy',
-            'items': sorted(dairy_items, key=lambda x: x['name'])
-        })
-    
-    if pantry_items:
-        grocery_data['sections'].append({
-            'title': '🌾 Pantry',
-            'items': sorted(pantry_items, key=lambda x: x['name'])
-        })
-    
-    return grocery_data
+    except Exception as e:
+        logger.error(f"Error generating grocery list: {e}")
+        return get_sample_grocery_data()
 
 def transform_meal_plan_for_templates(raw_meal_plan):
     """
@@ -604,8 +544,11 @@ def get_sample_meal_data(user):
 
 def get_sample_grocery_data():
     """Fallback sample grocery list"""
+    monday = get_monday_of_week()
+    week_str = get_week_date_range(monday)
+    
     return {
-        "week": datetime.now().strftime("%B %d-%d"),
+        "week": week_str,
         "sections": [
             {
                 "title": "🥬 Produce",
@@ -1151,6 +1094,7 @@ def create_plan():
         
         # ============ GENERATE WORKOUT PLAN ============
         logger.info(f"Generating workout plan for user {user_id}")
+        workout_generator = WorkoutGenerator(exercise_db='exercises.db', user_id = session['user_id'])
         workout_data = workout_generator.generate_weekly_plan(user_id)
         
         # ============ GENERATE MEAL PLAN (API CALL) ============
@@ -1283,6 +1227,7 @@ def regenerate_workout():
     db = get_db()
     try:
         user_id = session['user_id']
+        workout_generator = WorkoutGenerator(exercise_db='exercises.db', user_id = user_id)
         workout_plan = workout_generator.generate_weekly_plan(user_id)
         
         # Update database
@@ -1606,6 +1551,7 @@ def generate_workout_plan():
         user_id = session['user_id']
         
         # Generate workout plan
+        workout_generator = WorkoutGenerator(exercise_db='exercises.db', user_id = user_id)
         workout_plan = workout_generator.generate_weekly_plan(user_id)
         
         # Save to database
@@ -1714,6 +1660,85 @@ def generate_meal_plan():
 @app.route('/api/generate-grocery-list', methods=['POST'])
 def generate_grocery_list():
     return jsonify({"message": "Grocery list generation - Work in progress"})
+
+@app.route('/api/update-grocery-item', methods=['POST'])
+def update_grocery_item():
+    """Update checked status of a grocery item"""
+    if 'user_id' not in session:
+        return jsonify({"error": "Not authenticated"}), 401
+    
+    db = get_db()
+    try:
+        user_id = session['user_id']
+        data = request.json
+        
+        # Validate input
+        if not data or 'category' not in data or 'name' not in data or 'checked' not in data:
+            return jsonify({"error": "Invalid request data"}), 400
+        
+        category = data['category']
+        item_name = data['name']
+        checked = bool(data['checked'])
+        
+        # Get current week's grocery list
+        monday = get_monday_of_week()
+        week_date = monday.strftime('%Y-%m-%d')
+        
+        result = db.execute(text('''
+            SELECT id, grocery_data FROM grocery_lists 
+            WHERE user_id = :user_id AND week_date = :week_date
+        '''), {'user_id': user_id, 'week_date': week_date})
+        grocery_record = result.fetchone()
+        
+        if not grocery_record:
+            return jsonify({"error": "Grocery list not found"}), 404
+        
+        # Parse grocery data
+        grocery_data = ensure_dict(grocery_record.grocery_data)
+        
+        # Find and update the item
+        item_updated = False
+        for section in grocery_data.get('sections', []):
+            # Extract category name from title (e.g., "🥬 Vegetables" -> "Vegetables")
+            section_category = section.get('title', '').split(' ', 1)[-1]
+            
+            if section_category == category:
+                for item in section.get('items', []):
+                    if item.get('name') == item_name:
+                        item['checked'] = checked
+                        item_updated = True
+                        break
+            
+            if item_updated:
+                break
+        
+        if not item_updated:
+            return jsonify({"error": "Item not found"}), 404
+        
+        # Update database
+        db.execute(text('''
+            UPDATE grocery_lists 
+            SET grocery_data = :grocery_data 
+            WHERE id = :id
+        '''), {
+            'id': grocery_record.id,
+            'grocery_data': json.dumps(grocery_data, cls=DecimalEncoder)
+        })
+        db.commit()
+        
+        logger.info(f"Updated grocery item: {item_name} in {category} to checked={checked}")
+        
+        return jsonify({
+            "success": True,
+            "message": "Item updated successfully"
+        }), 200
+        
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error updating grocery item: {e}")
+        return jsonify({"error": "Failed to update item"}), 500
+    finally:
+        close_db()
 
 @app.route('/logout')
 def logout():

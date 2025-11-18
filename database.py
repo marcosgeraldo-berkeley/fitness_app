@@ -74,7 +74,6 @@ else:
     connection_args = {}
 connection_args["connect_timeout"] = 5  # fail fast while testing # TODO: extend this for production
 
-
 # Create engine
 engine = create_engine(
     conn_str,
@@ -84,8 +83,6 @@ engine = create_engine(
     connect_args=connection_args,
     echo=False  # Set to True for SQL query logging
 )
-
-
 
 # Create session factory
 SessionLocal = scoped_session(sessionmaker(bind=engine))

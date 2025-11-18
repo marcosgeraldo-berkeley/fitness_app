@@ -15,9 +15,11 @@ from sqlalchemy.orm import sessionmaker
 from dotenv import load_dotenv
 from decimal import Decimal
 from urllib.parse import quote_plus, urlencode, urlparse, urlunparse, parse_qsl
+import logging
 
 # Load environment variables
 load_dotenv()
+logger = logging.getLogger(__name__)
 
 def get_db_creds():
     # Local path: one JSON env var
@@ -44,14 +46,14 @@ def add_params(url, **extra):
     return urlunparse(u._replace(query=urlencode(q)))
 
 class WorkoutGenerator:
-    def __init__(self, exercise_db='exercises.db', database_url=None):
+    def __init__(self, user_id, exercise_db='exercises.db'):
         """
         Initialize workout generator
         
         Args:
             exercise_db: Path to SQLite exercise database (stays SQLite)
-            database_url: PostgreSQL URL for user data (optional, reads from env if None)
         """
+        self.user_id = user_id
         self.exercise_db = exercise_db
         
         # # PostgreSQL connection for user data
@@ -125,7 +127,7 @@ class WorkoutGenerator:
                 'weight': to_float(user_dict['weight']),  # in lbs
                 'fitness_goal': user_dict['fitness_goals'],
                 'activity_level': user_dict['activity_level'],
-                'workout_schedule': user_dict['workout_schedule'],
+                'workout_schedule': int(user_dict['workout_schedule']),
                 'physical_limitations': json.loads(user_dict['physical_limitations']) if user_dict['physical_limitations'] else [],
                 'available_equipment': json.loads(user_dict['available_equipment']) if user_dict['available_equipment'] else [],
                 'tdee': user_dict['tdee'],
@@ -169,7 +171,6 @@ class WorkoutGenerator:
             7: [7]
         }
         user_range = preference_ranges.get(workout_schedule, [3, 4])
-        
         # Ideal days by fitness goal (research-based)
         goal_ideal_days = {
             'weight-loss': 5,
@@ -547,10 +548,10 @@ class WorkoutGenerator:
         
         exercises = conn.execute(query, params).fetchall()
         conn.close()
-        
         result = []
         for ex in exercises:
             ex_dict = dict(ex)
+            # logger.info(f"get_eligible_exercises:\n id:{ex_dict['id']}, primary muscle:{ex_dict['primary_muscles']}")
             # Add contraindication priority flag
             if ex_dict['id'] in contraindication_info['modified_exercises']:
                 ex_dict['contraindication_status'] = 'modified'
@@ -724,9 +725,10 @@ class WorkoutGenerator:
         
         return total_time, calories
     
-    def generate_weekly_plan(self, user_id: int) -> Dict:
+    def generate_weekly_plan(self, user_id) -> Dict:
         """Main method to generate complete weekly workout plan"""
         user_profile = self.get_user_profile(user_id)
+        logger.info(f"(WORKOUT GENERATOR - generate_weekly_plan)\n user_profile:{user_profile}")
         fitness_level = self.determine_fitness_level(user_profile['activity_level'], user_profile['age'])
         
         workout_days, warning_flag, warning_message = self.determine_workout_days(
@@ -738,13 +740,12 @@ class WorkoutGenerator:
         
         volume_config = self.calculate_daily_volume(workout_days, user_profile['fitness_goal'], fitness_level)
         split = self.get_workout_split(workout_days, fitness_level, user_profile['fitness_goal'])
-        
+        logger.info(f"(WORKOUT GENERATOR - generate_weekly_plan)\n workout_days:{workout_days}\n warning_flag:{warning_flag}\n volume_config:{volume_config}\n split:{split}\n user_profile:{user_profile}")
         # NEW: Get contraindication info
         contraindication_info = self.get_contraindication_info(user_profile['physical_limitations'])
         
         # Get eligible exercises with contraindication filtering
         eligible_exercises = self.get_eligible_exercises(user_profile, fitness_level, contraindication_info)
-        
         if not eligible_exercises:
             raise ValueError("No eligible exercises found with current filters")
         
@@ -765,7 +766,7 @@ class WorkoutGenerator:
             'total_weekly_calories': 0,
             'days': []
         }
-        
+        logger.info(f"(WORKOUT GENERATOR - generate_weekly_plan)\n Weekly plan:{weekly_plan}")
         already_selected = []
         
         for day_info in split:
@@ -868,12 +869,12 @@ class WorkoutGenerator:
         return weekly_plan
 
 
-def main():
+def main(user_id):
     """Example usage"""
-    generator = WorkoutGenerator()
-    
+    generator = WorkoutGenerator(user_id = user_id)
+    logger.info(f"(WORKOUT GENERATOR - main)\n Initiating Workout generation")
     try:
-        plan = generator.generate_weekly_plan(user_id=1)
+        plan = generator.generate_weekly_plan()
         
         print(f"\n{'='*70}")
         print(f"WEEKLY WORKOUT PLAN - Week of {plan['week_of']}")

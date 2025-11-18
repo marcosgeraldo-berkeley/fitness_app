@@ -151,6 +151,226 @@ class MealPlanningAPI:
         except:
             return False
     
+    def _transform_meal_plan_to_grocery_format(self, meal_plan: Dict) -> List[List[str]]:
+        """
+        Transform meal plan into grocery list API format.
+        Each meal becomes one array of ingredient descriptions.
+        
+        Args:
+            meal_plan: Raw meal plan with daily_plans structure
+            
+        Returns:
+            list: List of meal descriptions (each meal = array of ingredient strings)
+        """
+        meal_descriptions = []
+        
+        if not meal_plan or 'daily_plans' not in meal_plan:
+            logger.warning("Invalid meal plan structure for grocery list generation")
+            return meal_descriptions
+        
+        for day in meal_plan.get('daily_plans', []):
+            for meal in day.get('meals', []):
+                if meal is None:
+                    continue
+                
+                ingredients = meal.get('ingredients', [])
+                quantities = meal.get('quantities', [])
+                units = meal.get('units', [])
+                
+                # Build ingredient descriptions for this meal
+                meal_ingredients = []
+                for i, ingredient in enumerate(ingredients):
+                    qty = quantities[i] if i < len(quantities) else "1"
+                    unit = units[i] if i < len(units) else "serving"
+                    
+                    # Format: "quantity unit ingredient"
+                    ingredient_desc = f"{qty} {unit} {ingredient}"
+                    meal_ingredients.append(ingredient_desc)
+                
+                if meal_ingredients:
+                    meal_descriptions.append(meal_ingredients)
+        
+        return meal_descriptions
+    
+    def generate_grocery_list(
+        self,
+        meal_plan: Dict,
+        model: str = "command-a-03-2025"
+    ) -> Optional[Dict]:
+        """
+        Generate a grocery list from a meal plan
+        
+        Args:
+            meal_plan (Dict): Meal plan data with daily_plans structure
+            model (str): Model to use for generation (default: command-a-03-2025)
+        
+        Returns:
+            Dict: Grocery list data with structure:
+                {
+                    "shopping_list": [
+                        {
+                            "category": str,
+                            "name": str,
+                            "unit": str,
+                            "quantity": float
+                        }
+                    ],
+                    "notes": str or None
+                }
+            None: If API call fails
+        
+        Raises:
+            MealPlanningAPIError: If API returns validation errors
+        """
+        url = f"{self.base_url.rstrip('/')}/generate-shopping-list"
+        
+        # Transform meal plan to API format
+        meal_descriptions = self._transform_meal_plan_to_grocery_format(meal_plan)
+        
+        if not meal_descriptions:
+            logger.warning("No meal descriptions extracted from meal plan")
+            return None
+        
+        # Prepare request payload
+        payload = {
+            "meal_descriptions": meal_descriptions,
+            "model": model
+        }
+        
+        headers = {
+            "Content-Type": "application/json"
+        }
+        
+        try:
+            logger.info(f"Calling grocery list API: {url}")
+            logger.info(f"Request payload with {len(meal_descriptions)} meals")
+            
+            response = requests.post(
+                url,
+                json=payload,
+                headers=headers,
+                timeout=self.timeout
+            )
+            
+            # Handle successful response
+            if response.status_code == 200:
+                grocery_data = response.json()
+                items_count = len(grocery_data.get('shopping_list', []))
+                logger.info(f"✓ Successfully generated grocery list with {items_count} items")
+                return grocery_data
+            
+            # Handle validation errors (422)
+            elif response.status_code == 422:
+                error_data = response.json()
+                error_messages = []
+                
+                for error in error_data.get('detail', []):
+                    location = " -> ".join(str(loc) for loc in error.get('loc', []))
+                    message = error.get('msg', 'Unknown error')
+                    error_messages.append(f"{location}: {message}")
+                
+                error_str = "; ".join(error_messages)
+                logger.error(f"Grocery API validation error: {error_str}")
+                raise MealPlanningAPIError(f"Invalid grocery list request: {error_str}")
+            
+            # Handle other errors
+            else:
+                logger.error(f"Grocery API error {response.status_code}: {response.text}")
+                response.raise_for_status()
+        
+        except requests.exceptions.Timeout:
+            logger.error(f"Grocery API timeout after {self.timeout} seconds")
+            return None
+        
+        except requests.exceptions.ConnectionError as e:
+            logger.error(f"Could not connect to grocery API at {url}: {str(e)}")
+            return None
+        
+        except MealPlanningAPIError:
+            # Re-raise our custom errors
+            raise
+        
+        except requests.exceptions.HTTPError as e:
+            logger.error(f"Grocery API HTTP error: {str(e)}")
+            return None
+        
+        except Exception as e:
+            logger.error(f"Unexpected error calling grocery API: {str(e)}")
+            return None
+    
+    def format_grocery_list_for_display(self, grocery_api_response: Dict, week_monday: datetime) -> Dict:
+        """
+        Format grocery API response for frontend display
+        
+        Args:
+            grocery_api_response (Dict): Raw API response with shopping_list
+            week_monday (datetime): The Monday of the week for this list
+        
+        Returns:
+            Dict: Formatted data ready for templates with categories and checked status
+        """
+        if not grocery_api_response or 'shopping_list' not in grocery_api_response:
+            logger.warning("Invalid grocery API response")
+            return {}
+        
+        shopping_list = grocery_api_response.get('shopping_list', [])
+        
+        if not shopping_list:
+            logger.warning("Empty shopping list from API")
+            return {}
+        
+        # Add checked status to each item
+        for item in shopping_list:
+            item['checked'] = False
+        
+        # Organize by category
+        categories = {}
+        for item in shopping_list:
+            category = item.get('category', 'Other')
+            if category not in categories:
+                categories[category] = []
+            categories[category].append(item)
+        
+        # Calculate week range
+        sunday = week_monday + timedelta(days=6)
+        if week_monday.month == sunday.month:
+            week_str = f"{week_monday.strftime('%b %d')} to {sunday.strftime('%d')}"
+        else:
+            week_str = f"{week_monday.strftime('%b %d')} to {sunday.strftime('%b %d')}"
+        
+        # Map categories to emoji icons
+        category_icons = {
+            'Pasta, Rice, and Cereals': '🌾',
+            'Vegetables': '🥬',
+            'Fruits': '🍎',
+            'Dairy': '🥛',
+            'Meat and Poultry': '🥩',
+            'Fish and Seafood': '🐟',
+            'Herbs and Spices': '🌿',
+            'Bakery': '🍞',
+            'Condiments and Sauces': '🧂',
+            'Oils and Fats': '🫒',
+            'Beverages': '🥤',
+            'Other': '📦'
+        }
+        
+        # Build final structure
+        grocery_data = {
+            'week': week_str,
+            'sections': []
+        }
+        
+        # Sort categories and build sections
+        for category in sorted(categories.keys()):
+            icon = category_icons.get(category, '📦')
+            grocery_data['sections'].append({
+                'title': f"{icon} {category}",
+                'items': categories[category]
+            })
+        
+        logger.info(f"Formatted grocery list with {len(shopping_list)} items in {len(categories)} categories")
+        return grocery_data
+    
     def format_for_display(self, meal_plan: Dict, week_monday: datetime) -> Dict:
         """
         Format API response for frontend display with actual dates
