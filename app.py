@@ -275,6 +275,18 @@ def parse_height_to_cm(height_str):
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Suppress Flask/Werkzeug access log entries for the health check endpoint
+class WerkzeugHealthcheckFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        request_line = None
+        if record.args and isinstance(record.args, tuple) and len(record.args) >= 3:
+            request_line = record.args[2]
+        message = record.getMessage()
+        combined = f"{request_line or ''} {message}"
+        return "/api/service-status" not in combined
+
+logging.getLogger("werkzeug").addFilter(WerkzeugHealthcheckFilter())
+
 def ensure_database_schema():
     """Make sure required tables and columns exist before serving traffic."""
     try:
