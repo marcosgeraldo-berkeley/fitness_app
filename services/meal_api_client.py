@@ -24,7 +24,7 @@ class MealPlanningAPI:
             'RECIPE_API_BASE', 
             'https://cqztaifwfa.us-east-1.awsapprunner.com/' # production API as backup
         )
-        self.timeout = 60  # API developer specified 30 seconds
+        self.timeout = 90  # API developer specified 30 seconds
     
     def generate_meal_plan(
         self,
