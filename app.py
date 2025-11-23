@@ -1535,7 +1535,8 @@ def grocery_page():
                                 {'id': session['user_id']})
         grocery_list = result.fetchone()
         
-        grocery_data = grocery_list.grocery_data if grocery_list else None
+        # ensure grocery data is a dict
+        grocery_data = ensure_dict(grocery_list.grocery_data) if grocery_list else None
         
         return render_template('grocery.html', 
                                 grocery_list=grocery_data,
