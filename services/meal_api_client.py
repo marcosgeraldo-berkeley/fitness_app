@@ -182,7 +182,12 @@ class MealPlanningAPI:
                 for i, ingredient in enumerate(ingredients):
                     qty = quantities[i] if i < len(quantities) else "1"
                     unit = units[i] if i < len(units) else "serving"
-                    
+
+                    # ingredients include descriptors separated by commas. Split by comma and reverse the order, removing the commas and rejoin
+                    parts = [part.strip() for part in ingredient.split(',')]
+                    parts.reverse()
+                    ingredient = ' '.join(parts)
+
                     # Format: "quantity unit ingredient"
                     ingredient_desc = f"{qty} {unit} {ingredient}"
                     meal_ingredients.append(ingredient_desc)
@@ -222,10 +227,15 @@ class MealPlanningAPI:
         Raises:
             MealPlanningAPIError: If API returns validation errors
         """
-        url = f"{self.base_url.rstrip('/')}/generate-shopping-list"
+        # url = f"{self.base_url.rstrip('/')}/generate-shopping-list"
+        # Try the logical version
+        url = f"{self.base_url.rstrip('/')}/generate-shopping-list-logical"
         
         # Transform meal plan to API format
         meal_descriptions = self._transform_meal_plan_to_grocery_format(meal_plan)
+
+        # Log the meal descriptions
+        logger.info(f"Meal descriptions for grocery list: {meal_descriptions}")
         
         if not meal_descriptions:
             logger.warning("No meal descriptions extracted from meal plan")
