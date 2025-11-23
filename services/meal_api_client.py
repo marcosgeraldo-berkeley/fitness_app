@@ -28,7 +28,10 @@ class MealPlanningAPI:
     
     def generate_meal_plan(
         self,
-        target_calories: int,
+        target_calories: float,
+        target_carbs: Optional[float] = None,
+        target_protein: Optional[float] = None,
+        target_fat: Optional[float] = None,
         dietary: List[str] = None,
         exclusions: str = "",
         preferences: str = "",
@@ -74,6 +77,12 @@ class MealPlanningAPI:
             "num_days": num_days,
             "limit_per_meal": limit_per_meal
         }
+        if target_carbs is not None:
+            payload["target_carbs"] = target_carbs
+        if target_protein is not None:
+            payload["target_protein"] = target_protein
+        if target_fat is not None:
+            payload["target_fat"] = target_fat
         
         headers = {
             "Content-Type": "application/json"

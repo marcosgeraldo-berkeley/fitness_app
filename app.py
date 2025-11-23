@@ -1112,9 +1112,13 @@ def create_plan():
                 except (json.JSONDecodeError, TypeError):
                     dietary = []
             
+            # logging.info(f"User Dictionary: {user_dict}")
             # Call meal planning API
             raw_meal_plan = meal_api.generate_meal_plan(
-                target_calories=int(user_dict['caloric_target'] or 2000),
+                target_calories=float(user_dict['caloric_target'] or 2000),
+                target_carbs=float(user_dict['carbs_target_g'] or 0),
+                target_protein=float(user_dict['protein_target_g'] or 0),
+                target_fat=float(user_dict['fat_target_g'] or 0),
                 dietary=dietary,
                 preferences=user.food_preferences,
                 exclusions=user.food_exclusions,
