@@ -30,8 +30,8 @@
                            {% if user and user.available_equipment and 'dumbbells' in user.available_equipment %}checked{% endif %}>
                     <div class="goal-icon">🏋️</div>
                     <div class="goal-text">
-                        <div class="goal-title">Dumbbells</div>
-                        <div class="goal-desc">Adjustable or fixed weight dumbbells</div>
+                        <div class="goal-title">Free Weights</div>
+                        <div class="goal-desc">Dumbbells or kettlebells </div>
                     </div>
                 </label>
                 
@@ -40,8 +40,8 @@
                            {% if user and user.available_equipment and 'resistance-bands' in user.available_equipment %}checked{% endif %}>
                     <div class="goal-icon">💪</div>
                     <div class="goal-text">
-                        <div class="goal-title">Resistance Bands</div>
-                        <div class="goal-desc">Elastic resistance bands</div>
+                        <div class="goal-title">Cable or Resistance Bands</div>
+                        <div class="goal-desc">Pulling cable or Elastic resistance bands</div>
                     </div>
                 </label>
                 
@@ -55,6 +55,26 @@
                     </div>
                 </label>
                 
+                <label class="goal-option multi-select" for="barbells">
+                    <input type="checkbox" name="equipment" value="barbells" id="barbells"
+                           {% if user and user.available_equipment and 'barbells' in user.available_equipment %}checked{% endif %}>
+                    <div class="goal-icon">🏋️</div>
+                    <div class="goal-text">
+                        <div class="goal-title">Barbells</div>
+                        <div class="goal-desc">Bars and weights for weightlifting</div>
+                    </div>
+                </label>
+
+                <label class="goal-option multi-select" for="workout-equipment">
+                    <input type="checkbox" name="equipment" value="workout-equipment" id="workout-equipment"
+                           {% if user and user.available_equipment and 'workout-equipment' in user.available_equipment %}checked{% endif %}>
+                    <div class="goal-icon">💪</div>
+                    <div class="goal-text">
+                        <div class="goal-title">Workout Equipment</div>
+                        <div class="goal-desc">Machines for specific muscle groups</div>
+                    </div>
+                </label>
+
                 <label class="goal-option multi-select" for="full-gym">
                     <input type="checkbox" name="equipment" value="full-gym" id="full-gym"
                            {% if user and user.available_equipment and 'full-gym' in user.available_equipment %}checked{% endif %}>

@@ -10,15 +10,17 @@ import os
 from datetime import datetime, timedelta
 from typing import Dict, List, Tuple, Optional
 import random
+import logging
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 from dotenv import load_dotenv
 from decimal import Decimal
 from urllib.parse import quote_plus, urlencode, urlparse, urlunparse, parse_qsl
-import logging
 
 # Load environment variables
 load_dotenv()
+db_host = 'postgres'
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 def get_db_creds():
@@ -35,8 +37,8 @@ def get_db_creds():
     # Fallback: read split vars (useful for quick tests)
     return {
         "username": os.getenv("POSTGRES_USER", "fitplan_user"),
-        "password": os.getenv("POSTGRES_PASSWORD", "fitplan_pass"),
-        "host": os.getenv("POSTGRES_HOST", "postgres"),
+        "password": os.getenv("POSTGRES_PASSWORD", "fitplan2025"),
+        "host": os.getenv("POSTGRES_HOST", db_host),
         "port": int(os.getenv("POSTGRES_PORT", "5432")),
         "dbname": os.getenv("POSTGRES_DB", "fitplan_db"),
     }
@@ -46,24 +48,17 @@ def add_params(url, **extra):
     return urlunparse(u._replace(query=urlencode(q)))
 
 class WorkoutGenerator:
-    def __init__(self, user_id, exercise_db='exercises.db'):
+    def __init__(self, exercise_db='exercises.db'):
         """
         Initialize workout generator
         
         Args:
             exercise_db: Path to SQLite exercise database (stays SQLite)
+            database_url: PostgreSQL URL for user data (optional, reads from env if None)
         """
-        self.user_id = user_id
         self.exercise_db = exercise_db
         
         # # PostgreSQL connection for user data
-        # if database_url is None:
-        #     database_url = os.getenv(
-        #         'DATABASE_URL',
-        #         'postgresql://fitplan_user:fitplan_pass@localhost:5432/fitplan_db'
-        #     )
-        # self.database_url = database_url
-        # self.engine = create_engine(database_url, pool_pre_ping=True)
         creds = get_db_creds()
 
         # creds from your existing get_db_creds()
@@ -127,7 +122,7 @@ class WorkoutGenerator:
                 'weight': to_float(user_dict['weight']),  # in lbs
                 'fitness_goal': user_dict['fitness_goals'],
                 'activity_level': user_dict['activity_level'],
-                'workout_schedule': int(user_dict['workout_schedule']),
+                'workout_schedule': user_dict['workout_schedule'],
                 'physical_limitations': json.loads(user_dict['physical_limitations']) if user_dict['physical_limitations'] else [],
                 'available_equipment': json.loads(user_dict['available_equipment']) if user_dict['available_equipment'] else [],
                 'tdee': user_dict['tdee'],
@@ -171,6 +166,7 @@ class WorkoutGenerator:
             7: [7]
         }
         user_range = preference_ranges.get(workout_schedule, [3, 4])
+        
         # Ideal days by fitness goal (research-based)
         goal_ideal_days = {
             'weight-loss': 5,
@@ -318,32 +314,32 @@ class WorkoutGenerator:
             return [{
                 'day': 'Wednesday',
                 'focus': 'Total Body Blast',
-                'muscle_groups': ['chest', 'back', 'quadriceps', 'shoulders', 'biceps', 'triceps']
+                'muscle_groups': ['chest', 'middle back', 'quadriceps', 'shoulders', 'biceps', 'triceps']
             }]
         
         if days_per_week == 2:
             if fitness_level == 'beginner':
                 return [
-                    {'day': 'Monday', 'focus': 'Full Body A', 'muscle_groups': ['chest', 'back', 'quadriceps', 'shoulders']},
-                    {'day': 'Thursday', 'focus': 'Full Body B', 'muscle_groups': ['chest', 'back', 'quadriceps', 'shoulders']}
+                    {'day': 'Monday', 'focus': 'Full Body A', 'muscle_groups': ['chest', 'traps', 'quadriceps', 'shoulders']},
+                    {'day': 'Thursday', 'focus': 'Full Body B', 'muscle_groups': ['chest', 'middle back', 'quadriceps', 'shoulders']}
                 ]
             else:
                 return [
-                    {'day': 'Monday', 'focus': 'Upper Body', 'muscle_groups': ['chest', 'back', 'shoulders', 'biceps', 'triceps']},
+                    {'day': 'Monday', 'focus': 'Upper Body', 'muscle_groups': ['chest', 'traps', 'shoulders', 'biceps', 'triceps']},
                     {'day': 'Thursday', 'focus': 'Lower Body', 'muscle_groups': ['quadriceps', 'hamstrings', 'glutes', 'calves', 'abdominals']}
                 ]
         
         if days_per_week == 3:
             if fitness_level == 'beginner':
                 return [
-                    {'day': 'Monday', 'focus': 'Full Body A', 'muscle_groups': ['chest', 'back', 'quadriceps']},
+                    {'day': 'Monday', 'focus': 'Full Body A', 'muscle_groups': ['chest', 'traps', 'lats','quadriceps']},
                     {'day': 'Wednesday', 'focus': 'Full Body B', 'muscle_groups': ['shoulders', 'biceps', 'triceps', 'abdominals']},
-                    {'day': 'Friday', 'focus': 'Full Body C', 'muscle_groups': ['chest', 'back', 'quadriceps']}
+                    {'day': 'Friday', 'focus': 'Full Body C', 'muscle_groups': ['chest', 'traps', 'lats', 'quadriceps']}
                 ]
             else:
                 return [
                     {'day': 'Monday', 'focus': 'Push', 'muscle_groups': ['chest', 'shoulders', 'triceps']},
-                    {'day': 'Wednesday', 'focus': 'Pull', 'muscle_groups': ['back', 'lats', 'biceps', 'forearms']},
+                    {'day': 'Wednesday', 'focus': 'Pull', 'muscle_groups': ['traps', 'lats', 'biceps', 'forearms']},
                     {'day': 'Friday', 'focus': 'Legs & Core', 'muscle_groups': ['quadriceps', 'hamstrings', 'glutes', 'abdominals', 'calves']}
                 ]
         
@@ -352,15 +348,15 @@ class WorkoutGenerator:
                 return [
                     {'day': 'Monday', 'focus': 'Upper Body A', 'muscle_groups': ['chest', 'shoulders', 'triceps']},
                     {'day': 'Tuesday', 'focus': 'Lower Body A', 'muscle_groups': ['quadriceps', 'hamstrings', 'glutes']},
-                    {'day': 'Thursday', 'focus': 'Upper Body B', 'muscle_groups': ['back', 'lats', 'biceps', 'forearms']},
+                    {'day': 'Thursday', 'focus': 'Upper Body B', 'muscle_groups': ['traps', 'lats', 'biceps', 'forearms']},
                     {'day': 'Saturday', 'focus': 'Lower Body B', 'muscle_groups': ['quadriceps', 'calves', 'abdominals']}
                 ]
             else:
                 return [
-                    {'day': 'Monday', 'focus': 'Full Body Circuit', 'muscle_groups': ['chest', 'back', 'quadriceps']},
+                    {'day': 'Monday', 'focus': 'Full Body Circuit', 'muscle_groups': ['chest', 'traps', 'lats', 'quadriceps']},
                     {'day': 'Tuesday', 'focus': 'Cardio & Core', 'muscle_groups': ['abdominals', 'cardio']},
                     {'day': 'Thursday', 'focus': 'Full Body Strength', 'muscle_groups': ['shoulders', 'quadriceps', 'biceps', 'triceps']},
-                    {'day': 'Saturday', 'focus': 'HIIT & Conditioning', 'muscle_groups': ['chest', 'back', 'quadriceps']}
+                    {'day': 'Saturday', 'focus': 'HIIT & Conditioning', 'muscle_groups': ['chest', 'traps', 'lats', 'quadriceps']}
                 ]
         
         if days_per_week == 5:
@@ -368,33 +364,33 @@ class WorkoutGenerator:
                 return [
                     {'day': 'Monday', 'focus': 'Upper Push', 'muscle_groups': ['chest', 'shoulders', 'triceps']},
                     {'day': 'Tuesday', 'focus': 'Lower Body', 'muscle_groups': ['quadriceps', 'hamstrings', 'glutes']},
-                    {'day': 'Thursday', 'focus': 'Upper Pull', 'muscle_groups': ['back', 'biceps']},
-                    {'day': 'Friday', 'focus': 'Core & Cardio', 'muscle_groups': ['abdominals', 'lower back']},
+                    {'day': 'Thursday', 'focus': 'Upper Pull', 'muscle_groups': ['traps', 'lats', 'biceps']},
+                    {'day': 'Friday', 'focus': 'Core & Cardio', 'muscle_groups': ['abdominals', 'middle back','lower back']},
                     {'day': 'Saturday', 'focus': 'Full Body', 'muscle_groups': ['chest', 'back', 'quadriceps', 'shoulders']}
                 ]
             else:
                 return [
-                    {'day': 'Monday', 'focus': 'Chest & Triceps', 'muscle_groups': ['chest', 'triceps']},
-                    {'day': 'Tuesday', 'focus': 'Back & Biceps', 'muscle_groups': ['back', 'lats', 'biceps']},
+                    {'day': 'Monday', 'focus': 'Chest & Triceps', 'muscle_groups': ['chest','triceps']},
+                    {'day': 'Tuesday', 'focus': 'Back & Biceps', 'muscle_groups': ['traps', 'lats', 'middle back','biceps']},
                     {'day': 'Wednesday', 'focus': 'Legs', 'muscle_groups': ['quadriceps', 'hamstrings', 'glutes', 'calves']},
                     {'day': 'Thursday', 'focus': 'Shoulders & Core', 'muscle_groups': ['shoulders', 'abdominals', 'traps']},
-                    {'day': 'Saturday', 'focus': 'Full Body', 'muscle_groups': ['chest', 'back', 'quadriceps', 'shoulders']}
+                    {'day': 'Saturday', 'focus': 'Full Body', 'muscle_groups': ['traps', 'back', 'lower back','quadriceps', 'shoulders']}
                 ]
         
         if days_per_week == 6:
             return [
                 {'day': 'Monday', 'focus': 'Push A', 'muscle_groups': ['chest', 'shoulders', 'triceps']},
-                {'day': 'Tuesday', 'focus': 'Pull A', 'muscle_groups': ['back', 'lats', 'biceps']},
+                {'day': 'Tuesday', 'focus': 'Pull A', 'muscle_groups': ['traps', 'lats', 'biceps']},
                 {'day': 'Wednesday', 'focus': 'Legs A', 'muscle_groups': ['quadriceps', 'hamstrings', 'glutes']},
                 {'day': 'Thursday', 'focus': 'Push B', 'muscle_groups': ['chest', 'shoulders', 'triceps']},
-                {'day': 'Friday', 'focus': 'Pull B', 'muscle_groups': ['back', 'lats', 'biceps', 'forearms']},
+                {'day': 'Friday', 'focus': 'Pull B', 'muscle_groups': ['traps', 'lats', 'biceps', 'forearms']},
                 {'day': 'Saturday', 'focus': 'Legs B & Core', 'muscle_groups': ['quadriceps', 'calves', 'abdominals']}
             ]
         
         if days_per_week == 7:
             return [
                 {'day': 'Monday', 'focus': 'Chest & Triceps', 'muscle_groups': ['chest', 'triceps']},
-                {'day': 'Tuesday', 'focus': 'Back & Biceps', 'muscle_groups': ['back', 'lats', 'biceps']},
+                {'day': 'Tuesday', 'focus': 'Back & Biceps', 'muscle_groups': ['traps', 'lats', 'biceps']},
                 {'day': 'Wednesday', 'focus': 'Active Recovery', 'type': 'recovery', 
                  'description': 'Light yoga, stretching, or 20-min walk at easy pace'},
                 {'day': 'Thursday', 'focus': 'Shoulders & Core', 'muscle_groups': ['shoulders', 'abdominals', 'traps']},
@@ -473,27 +469,30 @@ class WorkoutGenerator:
     def filter_exercises_by_equipment(self, available_equipment: List[str]) -> List[str]:
         """Build list of equipment for filtering"""
         if not available_equipment:
-            return ['body only']
-        
+            return ['body only', None]
         equipment_mapping = {
-            'bodyweight': 'body only',
-            'dumbbells': 'dumbbell',
-            'resistance_bands': 'bands',
-            'kettlebells': 'kettlebells',
-            'barbell': 'barbell',
-            'pull_up_bar': 'cable',
-            'exercise_ball': 'exercise ball',
-            'yoga_mat': 'body only'
+            'no-equipment': ['body only', None],
+            'dumbbells': ['dumbbell', 'kettlebell'],
+            'resistance-bands': ['bands','cable'],
+            'cardio-equipment':['machine-cardio'],
+            'barbells': ['barbell','e-z curl bar'],
+            'workout-equipment':['machine-workout'],
+            'full-gym': ['dumbbell', 'kettlebell','bands','cable','machine-cardio','barbell','e-z curl bar','machine-workout','medicine ball', 'exercise ball']
         }
+        db_equipment = []
+        for eq in available_equipment:
+            db_equipment += equipment_mapping.get(eq, None)
         
-        db_equipment = [equipment_mapping.get(eq, eq) for eq in available_equipment]
-        db_equipment.append('body only')
+        if 'body only' not in db_equipment:
+            db_equipment.append('body only')
+            db_equipment.append(None)
         
         return list(set(db_equipment))
     
     def get_eligible_exercises(self, user_profile: Dict, fitness_level: str, 
                               contraindication_info: Dict) -> List[Dict]:
         """Get all exercises with contraindication priority"""
+        
         conn = sqlite3.connect(self.exercise_db)
         conn.row_factory = sqlite3.Row
         
@@ -516,7 +515,7 @@ class WorkoutGenerator:
                 e.id,
                 e.name,
                 e.level,
-                e.equipment,
+                e.equipment_2 as equipment,
                 e.category,
                 e.mechanic,
                 e.force,
@@ -535,9 +534,9 @@ class WorkoutGenerator:
             LEFT JOIN exercise_secondary_muscles esm ON e.id = esm.exercise_id
             LEFT JOIN muscles sm ON esm.muscle_id = sm.muscle_id
             LEFT JOIN exercise_programming p ON e.id = p.exercise_id
-            WHERE e.category IN ('strength', 'cardio', 'plyometrics')
+            WHERE e.category IN ('strength', 'cardio', 'plyometrics','powerlifting', 'olympic weightlifting')
                 AND e.level IN ({level_placeholder})
-                AND e.equipment IN ({equipment_placeholder})
+                AND e.equipment_2 IN ({equipment_placeholder})
                 {f"AND e.id NOT IN ({excluded_placeholder})" if excluded_ids else ""}
             GROUP BY e.id
         '''
@@ -548,10 +547,10 @@ class WorkoutGenerator:
         
         exercises = conn.execute(query, params).fetchall()
         conn.close()
+        
         result = []
         for ex in exercises:
             ex_dict = dict(ex)
-            # logger.info(f"get_eligible_exercises:\n id:{ex_dict['id']}, primary muscle:{ex_dict['primary_muscles']}")
             # Add contraindication priority flag
             if ex_dict['id'] in contraindication_info['modified_exercises']:
                 ex_dict['contraindication_status'] = 'modified'
@@ -589,22 +588,23 @@ class WorkoutGenerator:
         # Goal alignment
         if fitness_goal == 'weight-loss' and exercise['category'] in ['cardio', 'plyometrics']:
             score += 20
-        elif fitness_goal in ['muscle-building', 'strength'] and exercise['category'] == 'strength':
+        elif fitness_goal in ['muscle-building', 'strength'] and exercise['category'] in ['strength', 'powerlifting', 'olympic weightlifting']:
             score += 15
         elif fitness_goal == 'endurance' and exercise['category'] in ['cardio', 'plyometrics']:
+            score += 15
+        elif fitness_goal == 'general_fitness' and exercise['category'] in ['cardio', 'plyometrics', 'strength', 'powerlifting', 'olympic weightlifting']:
             score += 15
         
         # Equipment preference
         if exercise['equipment'] in ['body only', None]:
-            score += 8
+            score -= 20
         
         # Avoid repetition
         if exercise['id'] in already_selected:
-            score -= 100
+            score -= 50
         
         # Slight randomness
         score += random.uniform(-3, 3)
-        
         return score
     
     def select_exercises_for_day(self, eligible_exercises: List[Dict], 
@@ -687,7 +687,7 @@ class WorkoutGenerator:
                 reverse=True
             )
             selected.extend(remaining[:target_count - len(selected)])
-        
+  
         return selected, warnings
     
     def calculate_programming(self, exercise: Dict, fitness_level: str, 
@@ -725,10 +725,9 @@ class WorkoutGenerator:
         
         return total_time, calories
     
-    def generate_weekly_plan(self, user_id) -> Dict:
+    def generate_weekly_plan(self, user_id: int) -> Dict:
         """Main method to generate complete weekly workout plan"""
         user_profile = self.get_user_profile(user_id)
-        logger.info(f"(WORKOUT GENERATOR - generate_weekly_plan)\n user_profile:{user_profile}")
         fitness_level = self.determine_fitness_level(user_profile['activity_level'], user_profile['age'])
         
         workout_days, warning_flag, warning_message = self.determine_workout_days(
@@ -740,12 +739,13 @@ class WorkoutGenerator:
         
         volume_config = self.calculate_daily_volume(workout_days, user_profile['fitness_goal'], fitness_level)
         split = self.get_workout_split(workout_days, fitness_level, user_profile['fitness_goal'])
-        logger.info(f"(WORKOUT GENERATOR - generate_weekly_plan)\n workout_days:{workout_days}\n warning_flag:{warning_flag}\n volume_config:{volume_config}\n split:{split}\n user_profile:{user_profile}")
+        
         # NEW: Get contraindication info
         contraindication_info = self.get_contraindication_info(user_profile['physical_limitations'])
         
         # Get eligible exercises with contraindication filtering
         eligible_exercises = self.get_eligible_exercises(user_profile, fitness_level, contraindication_info)
+        
         if not eligible_exercises:
             raise ValueError("No eligible exercises found with current filters")
         
@@ -766,7 +766,7 @@ class WorkoutGenerator:
             'total_weekly_calories': 0,
             'days': []
         }
-        logger.info(f"(WORKOUT GENERATOR - generate_weekly_plan)\n Weekly plan:{weekly_plan}")
+        
         already_selected = []
         
         for day_info in split:
@@ -869,12 +869,12 @@ class WorkoutGenerator:
         return weekly_plan
 
 
-def main(user_id):
+def main():
     """Example usage"""
-    generator = WorkoutGenerator(user_id = user_id)
-    logger.info(f"(WORKOUT GENERATOR - main)\n Initiating Workout generation")
+    generator = WorkoutGenerator()
+    
     try:
-        plan = generator.generate_weekly_plan()
+        plan = generator.generate_weekly_plan(user_id=1)
         
         print(f"\n{'='*70}")
         print(f"WEEKLY WORKOUT PLAN - Week of {plan['week_of']}")
