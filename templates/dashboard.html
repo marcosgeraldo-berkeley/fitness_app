@@ -47,7 +47,7 @@
     {% endif %}
     
     <div class="scrollable-content">
-        <!-- Quick Stats -->
+        <!-- Quick Stats
         {% if workout_plan %}
         <div class="workout-stats">
             {% if workout_plan.workout_days_per_week %}
@@ -71,13 +71,13 @@
             </div>
             {% endif %}
         </div>
-        {% endif %}
+        {% endif %} -->
         
         <!-- Navigation Cards -->
-        <div style="margin-top: 20px;">
+        <div style="margin-top: 1px;">
             <a href="{{ url_for('workout_page') }}" style="text-decoration: none;">
                 <div class="workout-day" style="cursor: pointer;">
-                    <div class="workout-day-header">
+                    <div class="workout-day-header" >
                         <div>
                             <div class="workout-day-title">💪 Your Workout Plan</div>
                             <p style="font-size: 11px; color: #666; margin: 4px 0 0 0;">
@@ -115,7 +115,7 @@
                 <div class="workout-day" style="cursor: pointer; border-left-color: #fa8c16; background: #fffaf0;">
                     <div class="workout-day-header">
                         <div>
-                            <div class="workout-day-title">🛒 Shopping List</div>
+                            <div class="workout-day-title">🛒 Your Shopping List</div>
                             <p style="font-size: 11px; color: #666; margin: 4px 0 0 0;">
                                 {% if grocery_list %}
                                     View your weekly grocery list

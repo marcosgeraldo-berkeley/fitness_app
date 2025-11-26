@@ -1095,7 +1095,7 @@ def create_plan():
         
         # ============ GENERATE WORKOUT PLAN ============
         logger.info(f"Generating workout plan for user {user_id}")
-        workout_generator = WorkoutGenerator(exercise_db='exercises.db', user_id = session['user_id'])
+        workout_generator = WorkoutGenerator(exercise_db='exercises.db')
         workout_data = workout_generator.generate_weekly_plan(user_id)
         
         # ============ GENERATE MEAL PLAN (API CALL) ============
