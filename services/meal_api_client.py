@@ -228,9 +228,11 @@ class MealPlanningAPI:
                 if meal is None:
                     logging.warning("Null meal encountered in meal plan")
                     continue
-                
                 meal_merge_ingredients = meal.get('merge_ingredients', [])
-                for ingredient in meal_merge_ingredients:
+                raw_units = meal.get('units', [])
+                raw_units = [u.lower().strip() if u else None for u in raw_units]
+                for r,ingredient in zip(raw_units, meal_merge_ingredients):
+                    ingredient['r'] = r
                     ingredient['recipe_id'] = meal.get('recipe_id', None)
                     ingredient['title'] = meal.get('title', None)
                 # logging.info(f"Meal merge ingredients: {merge_ingredients}")
@@ -385,12 +387,14 @@ class MealPlanningAPI:
         """
         # Use the pre-tagged endpoint
         url = f"{self.base_url.rstrip('/')}/generate-shopping-list-pre-tagged"
+
+        # print(f"\n\nmeal_plan: {meal_plan}")
         
         # Transform meal plan to API format
         merge_ingredients = self._transform_tagged_meal_plan_to_grocery_format(meal_plan)
 
         # Log the merge ingredients
-        logger.info(f"Merge ingredients for grocery list: {merge_ingredients}")
+        # logger.info(f"Merge ingredients for grocery list: {merge_ingredients}")
         
         if not merge_ingredients:
             logger.warning("No merge ingredients extracted from meal plan")

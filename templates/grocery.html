@@ -133,9 +133,15 @@
                             </div>
                             <!-- expandable box to show recipe names -->
                             <div class="grocery-item-details">
-                                {% if item.get('recipe_names') %}
+                                {% if item.get('recipe_and_ingredients') %}
                                     <div class="grocery-item-recipes" style="font-size: 11px; color: #666; margin-top: 4px;">
-                                        Used in: {{ item['recipe_names'] | join(', ') }}
+                                        <!-- join recipe_and_ingredients together on new lines -->
+                                        <!-- bold the recipe and italisize the quantity and unit -->
+                                        Used in: <br>
+                                        {% for entry in item['recipe_and_ingredients'] %}
+                                            - <strong>{{ entry.recipe}}</strong>:<br>
+                                            <em>{{ entry.quantity }} {{ entry.unit }}</em> {{ entry.ingredient }}<br>
+                                        {% endfor %}
                                     </div>
                                 {% endif %}
                             </div>
