@@ -16,6 +16,7 @@ from sqlalchemy.orm import sessionmaker
 from dotenv import load_dotenv
 from decimal import Decimal
 from urllib.parse import quote_plus, urlencode, urlparse, urlunparse, parse_qsl
+from database import get_db, close_db, init_db, get_engine
 
 # Load environment variables
 load_dotenv()
@@ -37,7 +38,7 @@ def get_db_creds():
     # Fallback: read split vars (useful for quick tests)
     return {
         "username": os.getenv("POSTGRES_USER", "fitplan_user"),
-        "password": os.getenv("POSTGRES_PASSWORD", "fitplan2025"),
+        "password": os.getenv("POSTGRES_PASSWORD", "fitplan_pass"),
         "host": os.getenv("POSTGRES_HOST", db_host),
         "port": int(os.getenv("POSTGRES_PORT", "5432")),
         "dbname": os.getenv("POSTGRES_DB", "fitplan_db"),
