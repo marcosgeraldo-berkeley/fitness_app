@@ -34,6 +34,13 @@
 .grocery-item {
     cursor: pointer;
     transition: opacity 0.3s;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    box-sizing: border-box;
+    width: 100%;
+    max-width: 100%;
+    overflow: hidden;
 }
 
 .grocery-item.checked {
@@ -57,6 +64,36 @@
     margin: 0;
     font-size: 13px;
     color: #c62828;
+}
+
+/* Expandable box to show recipe names */
+.grocery-item-details {
+    margin-top: 4px;
+    font-size: 11px;
+    color: #666;
+    display: none;
+}
+
+.grocery-item.expanded .grocery-item-details {
+    display: block;
+}
+
+.grocery-item-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+}
+
+.expand-toggle {
+    font-size: 12px;
+    color: #666;
+    transition: transform 0.2s ease;
+    flex-shrink: 0;
+}
+
+.grocery-item.expanded .expand-toggle {
+    transform: rotate(90deg);
 }
 </style>
 {% endblock %}
@@ -84,12 +121,23 @@
                              data-category="{{ section.title.split(' ', 1)[1] if section.title.split(' ')|length > 1 else section.title }}"
                              data-name="{{ item['name'] }}"
                              onclick="toggleGroceryItem(this)">
-                            <div>
-                                <div class="grocery-item-name">{{ item['name'] }}</div>
-                                <div class="grocery-item-quantity">
-                                    {{ "%.2f"|format(item['quantity']) if item['quantity'] is number else item['quantity'] }} 
-                                    {{ item.get('unit', '') }}
+                            <div class="grocery-item-header">
+                                <div class="expand-toggle" onclick="toggleDetails(event, this)">&#9656;</div>
+                                <div>
+                                    <div class="grocery-item-name">{{ item['name'] }}</div>
+                                    <div class="grocery-item-quantity">
+                                        {{ "%.2f"|format(item['quantity']) if item['quantity'] is number else item['quantity'] }} 
+                                        {{ item.get('unit', '') }}
+                                    </div>
                                 </div>
+                            </div>
+                            <!-- expandable box to show recipe names -->
+                            <div class="grocery-item-details">
+                                {% if item.get('recipe_names') %}
+                                    <div class="grocery-item-recipes" style="font-size: 11px; color: #666; margin-top: 4px;">
+                                        Used in: {{ item['recipe_names'] | join(', ') }}
+                                    </div>
+                                {% endif %}
                             </div>
                         </div>
                     {% endfor %}
@@ -223,6 +271,12 @@ async function saveGroceryChanges() {
     } else {
         showSaveIndicator('error', 'Save failed');
     }
+}
+
+function toggleDetails(event, toggleElement) {
+    event.stopPropagation();
+    const item = toggleElement.closest('.grocery-item');
+    item.classList.toggle('expanded');
 }
 
 // Save on page unload if there are pending changes

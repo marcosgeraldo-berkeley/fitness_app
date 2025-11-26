@@ -206,6 +206,42 @@ class MealPlanningAPI:
         
         return meal_descriptions
     
+    def _transform_tagged_meal_plan_to_grocery_format(self, meal_plan: Dict) -> List[List[dict]]:
+        """
+        Transform meal plan into grocery list API format.
+        Each meal becomes one array of ingredient descriptions.
+        
+        Args:
+            meal_plan: Raw meal plan with daily_plans structure
+            
+        Returns:
+            list: List of meal merge ingredients (each meal = array of ingredient dicts)
+        """
+        merge_ingredients = []
+        
+        if not meal_plan or 'daily_plans' not in meal_plan:
+            logger.warning("Invalid meal plan structure for grocery list generation")
+            return merge_ingredients
+        
+        for day in meal_plan.get('daily_plans', []):
+            for meal in day.get('meals', []):
+                if meal is None:
+                    logging.warning("Null meal encountered in meal plan")
+                    continue
+                
+                meal_merge_ingredients = meal.get('merge_ingredients', [])
+                for ingredient in meal_merge_ingredients:
+                    ingredient['recipe_id'] = meal.get('recipe_id', None)
+                    ingredient['title'] = meal.get('title', None)
+                # logging.info(f"Meal merge ingredients: {merge_ingredients}")
+                
+                if meal_merge_ingredients:
+                    merge_ingredients.append(meal_merge_ingredients)
+        # logging.info(f"mege_ingredients: {merge_ingredients}")
+        # Flatten the list of lists into a single list
+        flat_merge_ingredients = [item for sublist in merge_ingredients for item in sublist]
+        return flat_merge_ingredients
+    
     def generate_grocery_list(
         self,
         meal_plan: Dict,
@@ -263,6 +299,115 @@ class MealPlanningAPI:
         try:
             logger.info(f"Calling grocery list API: {url}")
             logger.info(f"Request payload with {len(meal_descriptions)} meals")
+            
+            response = requests.post(
+                url,
+                json=payload,
+                headers=headers,
+                timeout=self.timeout
+            )
+            
+            # Handle successful response
+            if response.status_code == 200:
+                grocery_data = response.json()
+                items_count = len(grocery_data.get('shopping_list', []))
+                logger.info(f"✓ Successfully generated grocery list with {items_count} items")
+                return grocery_data
+            
+            # Handle validation errors (422)
+            elif response.status_code == 422:
+                error_data = response.json()
+                error_messages = []
+                
+                for error in error_data.get('detail', []):
+                    location = " -> ".join(str(loc) for loc in error.get('loc', []))
+                    message = error.get('msg', 'Unknown error')
+                    error_messages.append(f"{location}: {message}")
+                
+                error_str = "; ".join(error_messages)
+                logger.error(f"Grocery API validation error: {error_str}")
+                raise MealPlanningAPIError(f"Invalid grocery list request: {error_str}")
+            
+            # Handle other errors
+            else:
+                logger.error(f"Grocery API error {response.status_code}: {response.text}")
+                response.raise_for_status()
+        
+        except requests.exceptions.Timeout:
+            logger.error(f"Grocery API timeout after {self.timeout} seconds")
+            return None
+        
+        except requests.exceptions.ConnectionError as e:
+            logger.error(f"Could not connect to grocery API at {url}: {str(e)}")
+            return None
+        
+        except MealPlanningAPIError:
+            # Re-raise our custom errors
+            raise
+        
+        except requests.exceptions.HTTPError as e:
+            logger.error(f"Grocery API HTTP error: {str(e)}")
+            return None
+        
+        except Exception as e:
+            logger.error(f"Unexpected error calling grocery API: {str(e)}")
+            return None
+    
+    def generate_grocery_list_pre_tagged(
+        self,
+        meal_plan: Dict
+    ) -> Optional[Dict]:
+        """
+        Generate a grocery list from a meal plan
+        
+        Args:
+            meal_plan (Dict): Meal plan data with daily_plans structure
+        
+        Returns:
+            Dict: Grocery list data with structure:
+                {
+                    "shopping_list": [
+                        {
+                            "category": str,
+                            "name": str,
+                            "unit": str,
+                            "quantity": float,
+                            "recipe_ids": List[str],
+                            "recipe_names": List[str]
+                        }
+                    ],
+                    "notes": str or None
+                }
+            None: If API call fails
+        
+        Raises:
+            MealPlanningAPIError: If API returns validation errors
+        """
+        # Use the pre-tagged endpoint
+        url = f"{self.base_url.rstrip('/')}/generate-shopping-list-pre-tagged"
+        
+        # Transform meal plan to API format
+        merge_ingredients = self._transform_tagged_meal_plan_to_grocery_format(meal_plan)
+
+        # Log the merge ingredients
+        logger.info(f"Merge ingredients for grocery list: {merge_ingredients}")
+        
+        if not merge_ingredients:
+            logger.warning("No merge ingredients extracted from meal plan")
+            return None
+        
+        # Prepare request payload
+        payload = {
+            "merge_ingredients": merge_ingredients,
+        }
+        
+        headers = {
+            "Content-Type": "application/json"
+        }
+        
+        try:
+            logger.info(f"Calling grocery list API: {url}")
+            logger.info(f"Request payload with {len(merge_ingredients)} items")
             
             response = requests.post(
                 url,

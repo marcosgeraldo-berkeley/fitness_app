@@ -372,7 +372,8 @@ def generate_grocery_list_from_meals(meal_plan):
     
     try:
         # Use the API client to generate grocery list
-        grocery_api_response = meal_api.generate_grocery_list(meal_plan)
+        # grocery_api_response = meal_api.generate_grocery_list(meal_plan)
+        grocery_api_response = meal_api.generate_grocery_list_pre_tagged(meal_plan)
         
         if not grocery_api_response:
             logger.warning("Grocery API call failed, using sample data")
@@ -1133,6 +1134,7 @@ def create_plan():
                 
                 # Generate grocery list from meal plan
                 grocery_data = generate_grocery_list_from_meals(raw_meal_plan)
+                logger.info(f"Grocery list returned: {grocery_data is not None}")
             else:
                 logger.warning(f"Meal API returned None, using fallback for user {user_id}")
                 # Create default plan
