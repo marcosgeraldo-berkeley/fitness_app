@@ -230,12 +230,26 @@ class MealPlanningAPI:
                     continue
                 meal_merge_ingredients = meal.get('merge_ingredients', [])
                 raw_units = meal.get('units', [])
-                raw_units = [u.lower().strip() if u else None for u in raw_units]
-                for r,ingredient in zip(raw_units, meal_merge_ingredients):
-                    ingredient['r'] = r
-                    ingredient['recipe_id'] = meal.get('recipe_id', None)
-                    ingredient['title'] = meal.get('title', None)
+                if len(raw_units):
+                    raw_units = [u.lower().strip() if u else None for u in raw_units]
+                    for r,ingredient in zip(raw_units, meal_merge_ingredients):
+                        ingredient['r'] = r
+                        ingredient['recipe_id'] = meal.get('recipe_id', None)
+                        ingredient['title'] = meal.get('title', None)
+                else:
+                    for ingredient in meal_merge_ingredients:
+                        ingredient['r'] = None
+                        ingredient['recipe_id'] = meal.get('recipe_id', None)
+                        ingredient['title'] = meal.get('title', None)
                 # logging.info(f"Meal merge ingredients: {merge_ingredients}")
+                # Loop through units and fill in with 0 if missing
+                for ingredient in meal_merge_ingredients:
+                    if 'q' not in ingredient or ingredient['q'] is None:
+                        logger.warning(f"Missing quantity in ingredient: {ingredient}")
+                        ingredient['q'] = 0
+                    if 'u' not in ingredient or ingredient['u'] is None:
+                        logger.warning(f"Missing unit in ingredient: {ingredient}")
+                        ingredient['u'] = 'units'
                 
                 if meal_merge_ingredients:
                     merge_ingredients.append(meal_merge_ingredients)
@@ -512,13 +526,19 @@ class MealPlanningAPI:
             'Vegetables': '🥬',
             'Fruits': '🍎',
             'Dairy': '🥛',
-            'Meat and Poultry': '🥩',
-            'Fish and Seafood': '🐟',
+            # 'Meat and Poultry': '🥩',
+            'Meat and Fish': '🥩',
+            'Meat Alternatives': '🌱',
+            # 'Fish and Seafood': '🐟',
             'Herbs and Spices': '🌿',
-            'Bakery': '🍞',
-            'Condiments and Sauces': '🧂',
-            'Oils and Fats': '🫒',
-            'Beverages': '🥤',
+            'Bread and Baked Goods': '🍞',
+            # 'Condiments and Sauces': '🧂',
+            'Sauces and Condiments': '🧂',
+            'Cans and Jars': '🥫',
+            # 'Oils and Fats': '🫒',
+            'Drinks': '🥤',
+            'Frozen Foods': '🧊',
+            'Snacks': '🍪',
             'Other': '📦'
         }
         
