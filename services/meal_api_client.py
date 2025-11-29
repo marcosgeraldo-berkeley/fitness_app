@@ -229,18 +229,22 @@ class MealPlanningAPI:
                     logging.warning("Null meal encountered in meal plan")
                     continue
                 meal_merge_ingredients = meal.get('merge_ingredients', [])
+                # print(meal)
                 raw_units = meal.get('units', [])
+                raw_ingredients = meal.get('ingredients', [])
+                for ingredient in meal_merge_ingredients:
+                    ingredient['r'] = None
+                    ingredient['recipe_id'] = meal.get('recipe_id', None)
+                    ingredient['title'] = meal.get('title', None)
+                    ingredient['data_source'] = meal.get('data_source', None)
                 if len(raw_units):
                     raw_units = [u.lower().strip() if u else None for u in raw_units]
                     for r,ingredient in zip(raw_units, meal_merge_ingredients):
                         ingredient['r'] = r
-                        ingredient['recipe_id'] = meal.get('recipe_id', None)
-                        ingredient['title'] = meal.get('title', None)
-                else:
-                    for ingredient in meal_merge_ingredients:
-                        ingredient['r'] = None
-                        ingredient['recipe_id'] = meal.get('recipe_id', None)
-                        ingredient['title'] = meal.get('title', None)
+                if len(raw_ingredients):
+                    for ri,ingredient in zip(raw_ingredients, meal_merge_ingredients):
+                        ingredient['ri'] = ri
+
                 # logging.info(f"Meal merge ingredients: {merge_ingredients}")
                 # Loop through units and fill in with 0 if missing
                 for ingredient in meal_merge_ingredients:
@@ -389,7 +393,8 @@ class MealPlanningAPI:
                             "unit": str,
                             "quantity": float,
                             "recipe_ids": List[str],
-                            "recipe_names": List[str]
+                            "recipe_names": List[str],
+                            "data_sources": List[str],
                         }
                     ],
                     "notes": str or None
