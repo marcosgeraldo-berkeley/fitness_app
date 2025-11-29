@@ -148,7 +148,7 @@
                  {% if not generation_services_down %}hidden{% endif %}>
                 Plan generation is temporarily unavailable. Please check back soon.
             </div>
-            
+            <input type="hidden" id="user_timezone" name="user_timezone" value="UTC">
             <button type="submit"
                     class="btn-primary btn-create-plan"
                     style="width: 100%;"
@@ -302,5 +302,20 @@ document.addEventListener('DOMContentLoaded', function() {
         privacyCheckbox.addEventListener('change', updateButtonState);
     }
 });
+</script>
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        try {
+            // Modern browsers support this API
+            const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+            const input = document.getElementById('user_timezone');
+            if(input && tz) {
+                input.value = tz;
+                console.log("Detected timezone:", tz);
+            }
+        } catch(e) {
+            console.error("Could not detect timezone, defaulting to UTC");
+        }
+    });
 </script>
 {% endblock %}

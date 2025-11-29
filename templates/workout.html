@@ -389,87 +389,90 @@
                         
                         <!-- Exercises List -->
                         {% for exercise in day.exercises %}
-                            <div class="exercise-item {% if exercise.modifications %}has-modification{% endif %}" data-exercise-id="{{ exercise.id or exercise.name|replace(' ', '_') }}">
-                                <div style="flex: 1;">
-                                    <div class="exercise-name">
-                                        {% if exercise.order %}{{ exercise.order }}. {% endif %}
-                                        {{ exercise.name }}
-                                        {% if exercise.modifications %}
-                                            <span class="modification-icon">⚠️</span>
+                            <div class="exercise-item {% if exercise.modifications %}has-modification{% endif %}" 
+                                data-exercise-id="{{ exercise.id or exercise.name|replace(' ', '_') }}"
+                                style="display:block;">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                                    <div style="flex: 1;">
+                                        <div class="exercise-name">
+                                            {% if exercise.order %}{{ exercise.order }}. {% endif %}
+                                            {{ exercise.name }}
+                                            {% if exercise.modifications %}
+                                                <span class="modification-icon">⚠️</span>
+                                            {% endif %}
+                                        </div>
+                                        
+                                        <!-- Exercise Details Toggle -->
+                                        {% if exercise.instructions or exercise.primary_muscles or exercise.equipment or exercise.modifications %}
+                                            <button class="exercise-details-toggle" onclick="toggleExerciseDetails(this)">
+                                                Show details ▼
+                                            </button>
                                         {% endif %}
                                     </div>
                                     
-                                    <!-- Exercise Details Toggle -->
-                                    {% if exercise.instructions or exercise.primary_muscles or exercise.equipment or exercise.modifications %}
-                                        <button class="exercise-details-toggle" onclick="toggleExerciseDetails(this)">
-                                            Show details ▼
-                                        </button>
-                                    {% endif %}
-                                </div>
-                                
-                                <div style="text-align: right;">
-                                    <div class="exercise-details">
-                                        {% if exercise.sets and exercise.reps_range %}
-                                            {{ exercise.sets }} × {{ exercise.reps_range }}
-                                        {% elif exercise.sets and exercise.reps %}
-                                            {{ exercise.sets }} × {{ exercise.reps }}
-                                        {% elif exercise.sets %}
-                                            {{ exercise.sets }}
+                                    <div style="text-align: right;">
+                                        <div class="exercise-details">
+                                            {% if exercise.sets and exercise.reps_range %}
+                                                {{ exercise.sets }} × {{ exercise.reps_range }}
+                                            {% elif exercise.sets and exercise.reps %}
+                                                {{ exercise.sets }} × {{ exercise.reps }}
+                                            {% elif exercise.sets %}
+                                                {{ exercise.sets }}
+                                            {% endif %}
+                                        </div>
+                                        {% if exercise.rest_seconds %}
+                                            <div style="font-size: 9px; color: #999; margin-top: 2px;">
+                                                Rest: {{ exercise.rest_seconds }}s
+                                            </div>
                                         {% endif %}
                                     </div>
-                                    {% if exercise.rest_seconds %}
-                                        <div style="font-size: 9px; color: #999; margin-top: 2px;">
-                                            Rest: {{ exercise.rest_seconds }}s
-                                        </div>
-                                    {% endif %}
                                 </div>
-                                
                                 <!-- Expandable Exercise Details -->
                                 {% if exercise.instructions or exercise.primary_muscles or exercise.equipment or exercise.modifications %}
-                                    <div class="exercise-expanded">
-                                        <div class="exercise-meta">
-                                            {% if exercise.estimated_calories %}
-                                                <span class="meta-tag">🔥 {{ exercise.estimated_calories|round(0)|int }} cal</span>
-                                            {% endif %}
-                                            {% if exercise.estimated_time_min %}
-                                                <span class="meta-tag">⏱️ {{ exercise.estimated_time_min|round(1) }} min</span>
-                                            {% endif %}
-                                            {% if exercise.primary_muscles %}
-                                                <span class="meta-tag muscles">
-                                                    💪 {{ exercise.primary_muscles|join(', ')|truncate(20) }}
-                                                </span>
-                                            {% endif %}
-                                            {% if exercise.equipment %}
-                                                <span class="meta-tag equipment">
-                                                    🏋️ {{ exercise.equipment|replace('_', ' ')|title }}
-                                                </span>
-                                            {% endif %}
-                                        </div>
-                                        
-                                        {% if exercise.instructions %}
-                                            <div class="exercise-instructions">
-                                                <strong style="font-size: 10px; color: #333;">How to perform:</strong>
-                                                <ol>
-                                                    {% for instruction in exercise.instructions %}
-                                                        <li>{{ instruction }}</li>
-                                                    {% endfor %}
-                                                </ol>
-                                            </div>
+                                <div class="exercise-expanded">
+                                    <div class="exercise-meta">
+                                        {% if exercise.estimated_calories %}
+                                            <span class="meta-tag" style="width: 45%;">🔥 {{ exercise.estimated_calories|round(0)|int }} cal</span>
                                         {% endif %}
-                                        
-                                        <!-- NEW: Exercise Modifications -->
-                                        {% if exercise.modifications %}
-                                            <div class="exercise-modifications">
-                                                <div class="modification-header">⚠️ Adjustment for your condition:</div>
-                                                {% for modification in exercise.modifications %}
-                                                    <div class="modification-item">
-                                                        <div class="modification-category">{{ modification.category }}</div>
-                                                        <div class="modification-text">{{ modification.text }}</div>
-                                                    </div>
-                                                {% endfor %}
-                                            </div>
+                                        {% if exercise.estimated_time_min %}
+                                            <span class="meta-tag" style="width: 50%;">⏱️ {{ exercise.estimated_time_min|round(1) }} min</span>
+                                        {% endif %}
+                                        {% if exercise.primary_muscles %}
+                                            <span class="meta-tag muscles" style="width: 45%;">
+                                                💪 {{ exercise.primary_muscles|join(', ')|truncate(20) }}
+                                            </span>
+                                        {% endif %}
+                                        {% if exercise.equipment %}
+                                            <span class="meta-tag equipment" style="width: 50%;">
+                                                🏋️ {{ exercise.equipment|replace('_', ' ')|title }}
+                                            </span>
                                         {% endif %}
                                     </div>
+                                    
+                                    {% if exercise.instructions %}
+                                        <div class="exercise-instructions">
+                                            <strong style="font-size: 10px; color: #333;">How to perform:</strong>
+                                            <ol>
+                                                {% for instruction in exercise.instructions %}
+                                                    <li>{{ instruction }}</li>
+                                                {% endfor %}
+                                            </ol>
+                                        </div>
+                                    {% endif %}
+                                    
+                                    <!-- NEW: Exercise Modifications -->
+                                    {% if exercise.modifications %}
+                                        <div class="exercise-modifications">
+                                            <div class="modification-header">⚠️ Adjustment for your condition:</div>
+                                            {% for modification in exercise.modifications %}
+                                                <div class="modification-item">
+                                                    <div class="modification-category">{{ modification.category }}</div>
+                                                    <div class="modification-text">{{ modification.text }}</div>
+                                                </div>
+                                            {% endfor %}
+                                        </div>
+                                    {% endif %}
+                                </div>
                                 {% endif %}
                             </div>
                         {% endfor %}

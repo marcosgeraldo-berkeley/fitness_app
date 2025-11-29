@@ -1,6 +1,5 @@
 """
 app.py: Flask application to control the flow of the front end.
-UPDATED FOR POSTGRESQL
 """
 import os
 import logging
@@ -8,7 +7,9 @@ import hashlib
 import json
 import threading
 import time
-from datetime import datetime, timedelta
+import pytz
+from collections import deque
+from datetime import datetime, timedelta, timezone, date
 from services.meal_api_client import MealPlanningAPI, MealPlanningAPIError
 from flask import Flask, render_template, request, redirect, url_for, session, jsonify, flash, make_response
 from functools import wraps
@@ -152,17 +153,47 @@ def calculate_macros(caloric_target, fitness_goal):
         'fat_pct': int(ratios['fat'] * 100)
     }
 
-def get_monday_of_week(date=None):
-    """Get the Monday of the week for a given date (or today)"""
-    if date is None:
-        date = datetime.now()
-    elif isinstance(date, str):
-        date = datetime.strptime(date, '%Y-%m-%d')
+# def get_monday_of_week(date=None):
+#     """Get the Monday of the week for a given date (or today)"""
+#     if date is None:
+#         date = datetime.now()
+#     elif isinstance(date, str):
+#         date = datetime.strptime(date, '%Y-%m-%d')
     
-    # Monday = 0, Sunday = 6
-    days_since_monday = date.weekday()
-    monday = date - timedelta(days=days_since_monday)
-    return monday
+#     # Monday = 0, Sunday = 6
+#     days_since_monday = date.weekday()
+#     monday = date - timedelta(days=days_since_monday)
+#     return monday
+
+# ==================== TIMEZONE-AWARE HELPER FUNCTIONS ====================
+
+def get_user_current_date(user_timezone_str):
+    """Returns the current DATE object in the user's specific timezone."""
+    if not user_timezone_str:
+        user_timezone_str = 'UTC'  
+    try:
+        tz = pytz.timezone(user_timezone_str)
+        # We want the date relative to the user, not the server
+        return datetime.now(tz).date()
+    except pytz.UnknownTimeZoneError:
+        return datetime.now(pytz.utc).date()
+
+def get_current_plan_day(start_date_str, user_timezone_str):
+    """
+    Calculates which day of the plan (1-7) the user is currently on.
+    Returns: Integer (1-7). If plan is expired (>7), returns 8.
+    """
+    user_today = get_user_current_date(user_timezone_str)
+    
+    # Parse the start date from DB string (e.g., '2023-11-26')
+    try:
+        start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
+    except ValueError:
+        return 1 # Fallback
+        
+    delta = (user_today - start_date).days
+      
+    return delta + 1
 
 def get_day_number(date=None):
     """Get the day number (1-7) where Monday=1, Sunday=7"""
@@ -174,15 +205,55 @@ def get_day_number(date=None):
     # weekday() returns 0-6 (Monday-Sunday), we want 1-7
     return date.weekday() + 1
 
-def get_week_date_range(monday_date):
-    """Get formatted week range string like 'Oct 27 to Nov 2'"""
-    sunday = monday_date + timedelta(days=6)
+def rotate_workout_plan_to_start_date(workout_data, start_date_obj):
+    """
+    Rotate workout plan days to align with the actual start date.
+    Workout generator always produces Mon-Sun, but user can start on any day.
+    
+    Args:
+        workout_data: Dict from workout generator with 'days' list
+        start_date_obj: date object representing when the plan starts
+    
+    Returns:
+        Modified workout_data with rotated days and updated day labels
+    """
+    if not workout_data or 'days' not in workout_data:
+        return workout_data
+    
+    # Get the weekday (0=Monday, 6=Sunday)
+    weekday_offset = start_date_obj.weekday()
+    
+    # If starting on Monday, no rotation needed
+    if weekday_offset == 0:
+        # Still need to update day labels with dates
+        for i, day in enumerate(workout_data['days']):
+            day_date = start_date_obj + timedelta(days=i)
+            day['day'] = day_date.strftime('%A, %B %d')
+        return workout_data
+    
+    # Rotate the days list using deque
+    days_deque = deque(workout_data['days'])
+    days_deque.rotate(-weekday_offset)  # Rotate LEFT to shift start day
+    workout_data['days'] = list(days_deque)
+    
+    # Update day labels to show actual dates instead of weekday names
+    for i, day in enumerate(workout_data['days']):
+        day_date = start_date_obj + timedelta(days=i)
+        # Format: "Wednesday, November 27"
+        day['day'] = day_date.strftime('%A, %B %d')
+    
+    return workout_data
+
+def get_week_date_range(start_date_obj):
+    """Get formatted week range string like 'Nov 26 to Dec 2'"""
+    # Assuming start_date_obj is a datetime.date object
+    end_date = start_date_obj + timedelta(days=6)
     
     # If same month
-    if monday_date.month == sunday.month:
-        return f"{monday_date.strftime('%b %d')} to {sunday.strftime('%d')}"
+    if start_date_obj.month == end_date.month:
+        return f"{start_date_obj.strftime('%b %d')} to {end_date.strftime('%d')}"
     else:
-        return f"{monday_date.strftime('%b %d')} to {sunday.strftime('%b %d')}"
+        return f"{start_date_obj.strftime('%b %d')} to {end_date.strftime('%b %d')}"
 
 def recalculate_nutrition_targets(user_id):
     """Recalculate all nutrition targets for a user"""
@@ -355,12 +426,13 @@ def inject_service_status():
 
 # helper functions:
 
-def generate_grocery_list_from_meals(meal_plan):
+def generate_grocery_list_from_meals(meal_plan, start_date_obj): # UPDATED signature
     """
     Generate grocery list from meal plan using the API client
     
     Args:
         meal_plan: Raw response from meal planning API
+        start_date_obj: The date object (local time) when the plan starts
     
     Returns:
         dict: Grocery list organized by categories with checked status,
@@ -368,69 +440,45 @@ def generate_grocery_list_from_meals(meal_plan):
     """
     if not meal_plan or 'daily_plans' not in meal_plan:
         logger.warning("No valid meal plan data for grocery list generation")
-        return get_sample_grocery_data()
+        return get_sample_grocery_data(start_date_obj) # UPDATED call
     
     try:
         # Use the API client to generate grocery list
-        # grocery_api_response = meal_api.generate_grocery_list(meal_plan)
+        #grocery_api_response = meal_api.generate_grocery_list(meal_plan)
         grocery_api_response = meal_api.generate_grocery_list_pre_tagged(meal_plan)
         
         if not grocery_api_response:
             logger.warning("Grocery API call failed, using sample data")
-            return get_sample_grocery_data()
+            return get_sample_grocery_data(start_date_obj) # UPDATED call
         
         # Format the API response for display
-        monday = get_monday_of_week()
+        # Use the provided start_date_obj instead of calculating a Monday
         grocery_data = meal_api.format_grocery_list_for_display(
             grocery_api_response, 
-            monday
+            start_date_obj
         )
         
         if not grocery_data:
             logger.warning("Failed to format grocery list, using sample data")
-            return get_sample_grocery_data()
+            return get_sample_grocery_data(start_date_obj) # UPDATED call
         
         return grocery_data
         
     except MealPlanningAPIError as e:
         logger.error(f"Grocery API validation error: {e}")
-        return get_sample_grocery_data()
+        return get_sample_grocery_data(start_date_obj) # UPDATED call
     
     except Exception as e:
         logger.error(f"Error generating grocery list: {e}")
-        return get_sample_grocery_data()
+        return get_sample_grocery_data(start_date_obj) 
 
-def transform_meal_plan_for_templates(raw_meal_plan):
+def transform_meal_plan_for_templates(raw_meal_plan, start_date_obj): 
     """
     Transform API response to match the format expected by templates
-    NOW INCLUDES: instructions, ingredients, quantities, units for recipes
     
     Args:
-        raw_meal_plan: Response from meal planning API with structure:
-            {
-                "daily_plans": [
-                    {
-                        "day": 0,
-                        "target_calories": 2000,
-                        "total_calories": 1980,
-                        "meals": [...]
-                    }
-                ]
-            }
-    
-    Returns:
-        Dict in format expected by templates:
-            {
-                "week": "January 20-26",
-                "daily_calories": 2000,
-                "days": {
-                    "Monday": {
-                        "date": "January 20",
-                        "meals": [...with recipe data]
-                    },
-                    ...
-                }
-            }
+        raw_meal_plan: Response from meal planning API
+        start_date_obj: The date object (local time) when the plan starts
     """
         
     if not raw_meal_plan or 'daily_plans' not in raw_meal_plan:
@@ -438,13 +486,13 @@ def transform_meal_plan_for_templates(raw_meal_plan):
     
     day_names = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
     
-    # Calculate week range
-    today = datetime.now()
-    week_start = today
-    week_end = today + timedelta(days=6)
+    # Calculate week range using the start_date_obj
+    week_start = start_date_obj
+    #week_end = start_date_obj + timedelta(days=6)
     
     transformed = {
-        "week": f"{week_start.strftime('%B %d')}-{week_end.strftime('%d')}",
+        # Format week range dynamically
+        "week": get_week_date_range(week_start),
         "daily_calories": 0,
         "days": {}
     }
@@ -456,23 +504,32 @@ def transform_meal_plan_for_templates(raw_meal_plan):
         avg_calories = sum(day.get('target_calories', 0) for day in daily_plans) / len(daily_plans)
         transformed['daily_calories'] = int(avg_calories)
     
+    # Get day names starting from the start_date's weekday
+    # No rotation needed - just use sequential day names starting from start_date
+    
     # Transform each day
     for i, day_plan in enumerate(daily_plans):
         if i >= 7:  # Only handle up to 7 days
             break
         
-        day_name = day_names[i]
-        day_date = (week_start + timedelta(days=i)).strftime('%B %d')
+        # Calculate the actual date for this day
+        day_date_obj = week_start + timedelta(days=i)
+        day_name = day_date_obj.strftime('%A')  # e.g., "Wednesday"
+        day_date = day_date_obj.strftime('%B %d')  # e.g., "November 27"
         
         # Transform meals - NOW KEEPING ALL RECIPE DATA
         transformed_meals = []
+        total_actual_calories = 0
         for meal in day_plan.get('meals', []):
             if meal is None:
                 continue
             
+            meal_calories = meal.get('calories', 0)
+            total_actual_calories += meal_calories
+            
             transformed_meal = {
                 'title': meal.get('title', 'Untitled Meal'),
-                'calories': meal.get('calories', 0),
+                'calories': meal_calories,
                 'description': meal.get('description', ''),
                 'macros': meal.get('macros', {}),
                 # KEEP RECIPE DATA
@@ -480,7 +537,8 @@ def transform_meal_plan_for_templates(raw_meal_plan):
                 'ingredients': meal.get('ingredients', []),
                 'quantities': meal.get('quantities', []),
                 'units': meal.get('units', []),
-                'meal_type': meal.get('meal_type', '')
+                'meal_type': meal.get('meal_type', ''),
+                'type': meal.get('meal_type', '').lower()  # Add 'type' field for template
             }
             
             # Add meal type emoji
@@ -496,57 +554,78 @@ def transform_meal_plan_for_templates(raw_meal_plan):
             
             transformed_meals.append(transformed_meal)
         
-        transformed['days'][day_name] = {
+        # Use numbered keys (1-7) as template expects
+        day_number = i + 1
+        transformed['days'][day_number] = {
+            'day_name': day_name,
             'date': day_date,
-            'meals': transformed_meals
+            'meals': transformed_meals,
+            'target_calories': day_plan.get('target_calories', avg_calories),
+            'actual_calories': total_actual_calories
         }
     
     return transformed
 
 
-def get_sample_meal_data(user):
+def get_sample_meal_data(user, start_date_obj):
     """Fallback sample meal plan when API is unavailable"""
-    return {
-        "week": datetime.now().strftime("%B %d-%d"),
-        "daily_calories": user['caloric_target'] if user['caloric_target'] else 1650,
-        "days": {
-            "Monday": {
-                "date": datetime.now().strftime("%B %d"),
-                "meals": [
-                    {
-                        "title": "🌅 Breakfast",
-                        "calories": 420,
-                        "description": "Greek Yogurt Parfait with gluten-free granola and blueberries",
-                        "macros": {"protein": "25g", "carbs": "45g", "fat": "18g"}
-                    },
-                    {
-                        "title": "🥗 Lunch", 
-                        "calories": 480,
-                        "description": "Grilled Chicken Quinoa Bowl with roasted vegetables",
-                        "macros": {"protein": "32g", "carbs": "42g", "fat": "16g"}
-                    },
-                    {
-                        "title": "🍽️ Dinner",
-                        "calories": 520,
-                        "description": "Baked Salmon with sweet potato and steamed broccoli", 
-                        "macros": {"protein": "35g", "carbs": "38g", "fat": "22g"}
-                    },
-                    {
-                        "title": "🥜 Snacks",
-                        "calories": 230,
-                        "description": "Apple with almond butter, herbal tea",
-                        "macros": {"protein": "8g", "carbs": "22g", "fat": "14g"}
-                    }
-                ]
-            }
+    week_str = get_week_date_range(start_date_obj)
+    daily_calories = user['caloric_target'] if user['caloric_target'] else 1650
+    
+    # Generate 7 days of sample data
+    days_dict = {}
+    for i in range(7):
+        day_date_obj = start_date_obj + timedelta(days=i)
+        day_name = day_date_obj.strftime("%A")
+        day_date = day_date_obj.strftime("%B %d")
+        
+        days_dict[i + 1] = {
+            "day_name": day_name,
+            "date": day_date,
+            "target_calories": daily_calories,
+            "actual_calories": 1650,  # Sum of sample meals
+            "meals": [
+                {
+                    "title": "🌅 Breakfast",
+                    "calories": 420,
+                    "type": "breakfast",
+                    "description": "Greek Yogurt Parfait with gluten-free granola and blueberries",
+                    "macros": {"protein": "25g", "carbs": "45g", "fat": "18g"}
+                },
+                {
+                    "title": "🥗 Lunch", 
+                    "calories": 480,
+                    "type": "lunch",
+                    "description": "Grilled Chicken Quinoa Bowl with roasted vegetables",
+                    "macros": {"protein": "32g", "carbs": "42g", "fat": "16g"}
+                },
+                {
+                    "title": "🍽️ Dinner",
+                    "calories": 520,
+                    "type": "dinner",
+                    "description": "Baked Salmon with sweet potato and steamed broccoli", 
+                    "macros": {"protein": "35g", "carbs": "38g", "fat": "22g"}
+                },
+                {
+                    "title": "🥜 Snacks",
+                    "calories": 230,
+                    "type": "snack",
+                    "description": "Apple with almond butter, herbal tea",
+                    "macros": {"protein": "8g", "carbs": "22g", "fat": "14g"}
+                }
+            ]
         }
+    
+    return {
+        "week": week_str,
+        "daily_calories": daily_calories,
+        "days": days_dict
     }
 
 
-def get_sample_grocery_data():
+def get_sample_grocery_data(start_date_obj): # UPDATED signature
     """Fallback sample grocery list"""
-    monday = get_monday_of_week()
-    week_str = get_week_date_range(monday)
+    week_str = get_week_date_range(start_date_obj) # Use the calculated start date
     
     return {
         "week": week_str,
@@ -1062,10 +1141,12 @@ def create_plan():
     
     user_id = session['user_id']
     
-    # Calculate Monday of current week for week_date
-    monday = get_monday_of_week()
-    week_date = monday.strftime('%Y-%m-%d')
-    
+    # Get timezone of the user
+    user_timezone = request.form.get('user_timezone', 'US/Pacific')
+    # CALCULATE START DATE (Local to User)
+    start_date_obj = get_user_current_date(user_timezone)
+    start_date_str = start_date_obj.strftime('%Y-%m-%d')
+        
     # Get privacy acceptance
     privacy_accepted = request.form.get('privacy_accepted')
     if not privacy_accepted:
@@ -1073,18 +1154,20 @@ def create_plan():
         return redirect(url_for('profile_summary'))
     
     # Save privacy acceptance with timestamp
-    timestamp = datetime.now()
-
+    timestamp = datetime.now(timezone.utc) # Keep audit log in UTC
     db = get_db()
     try:
         # Update privacy acceptance
         db.execute(text('''
             UPDATE users 
-            SET privacy_accepted = TRUE, privacy_accepted_at = :timestamp
+            SET privacy_accepted = TRUE, 
+                privacy_accepted_at = :timestamp,
+                timezone = :tz
             WHERE id = :user_id
         '''), {
             'timestamp': timestamp,
-            'user_id': session['user_id']
+            'tz': user_timezone,
+            'user_id': user_id
         })
         db.commit()
         
@@ -1097,6 +1180,10 @@ def create_plan():
         logger.info(f"Generating workout plan for user {user_id}")
         workout_generator = WorkoutGenerator(exercise_db='exercises.db')
         workout_data = workout_generator.generate_weekly_plan(user_id)
+        
+        # ============ ROTATE WORKOUT PLAN TO ALIGN WITH START DATE ============
+        logger.info(f"Rotating workout plan to start on {start_date_obj.strftime('%A, %B %d')}")
+        workout_data = rotate_workout_plan_to_start_date(workout_data, start_date_obj)
         
         # ============ GENERATE MEAL PLAN (API CALL) ============
         logger.info(f"Generating meal plan for user {user_id}")
@@ -1133,75 +1220,74 @@ def create_plan():
                 meal_data = raw_meal_plan
                 
                 # Generate grocery list from meal plan
-                grocery_data = generate_grocery_list_from_meals(raw_meal_plan)
-                logger.info(f"Grocery list returned: {grocery_data is not None}")
+                grocery_data = generate_grocery_list_from_meals(raw_meal_plan, start_date_obj)
             else:
                 logger.warning(f"Meal API returned None, using fallback for user {user_id}")
                 # Create default plan
-                meal_data = meal_api.create_default_meal_plan(monday, int(user_dict['caloric_target'] or 2000))
-                grocery_data = get_sample_grocery_data()
+                meal_data = meal_api.create_default_meal_plan(start_date_obj, int(user_dict['caloric_target'] or 2000))
+                grocery_data = get_sample_grocery_data(start_date_obj)
         
         except MealPlanningAPIError as e:
             logger.error(f"Meal API validation error: {str(e)}")
-            meal_data = meal_api.create_default_meal_plan(monday, int(user_dict['caloric_target'] or 2000))
-            grocery_data = get_sample_grocery_data()
+            meal_data = meal_api.create_default_meal_plan(start_date_obj, int(user_dict['caloric_target'] or 2000))
+            grocery_data = get_sample_grocery_data(start_date_obj)
             flash('Using default meal plan - meal service validation error', 'warning')
         
         except Exception as e:
             logger.error(f"Error generating meal plan: {str(e)}")
             import traceback
             traceback.print_exc()
-            meal_data = meal_api.create_default_meal_plan(monday, int(user_dict['caloric_target'] or 2000))
-            grocery_data = get_sample_grocery_data()
+            meal_data = meal_api.create_default_meal_plan(start_date_obj, int(user_dict['caloric_target'] or 2000))
+            grocery_data = get_sample_grocery_data(start_date_obj)
             flash('Using default meal plan - error occurred', 'warning')
         
         # ============ SAVE EVERYTHING TO DATABASE ============
         
         # Save workout plan (upsert to overwrite existing weeks)
         db.execute(text('''
-            INSERT INTO workout_plans (user_id, week_date, plan_data)
-            VALUES (:user_id, :week_date, :plan_data)
-            ON CONFLICT (user_id, week_date)
+            INSERT INTO workout_plans (user_id, start_date, plan_data)
+            VALUES (:user_id, :start_date, :plan_data)
+            ON CONFLICT (user_id, start_date)
             DO UPDATE SET
                 plan_data = EXCLUDED.plan_data,
                 updated_at = CURRENT_TIMESTAMP
         '''), {
             'user_id': user_id,
-            'week_date': week_date,
+            'start_date': start_date_str,
             'plan_data': json.dumps(workout_data, cls=DecimalEncoder)
         })
         
         # Save meal plan (storing the RAW API output)
         db.execute(text('''
-            INSERT INTO meal_plans (user_id, week_date, plan_data)
-            VALUES (:user_id, :week_date, :plan_data)
-            ON CONFLICT (user_id, week_date)
+            INSERT INTO meal_plans (user_id, start_date, plan_data)
+            VALUES (:user_id, :start_date, :plan_data)
+            ON CONFLICT (user_id, start_date)
             DO UPDATE SET
                 plan_data = EXCLUDED.plan_data,
                 updated_at = CURRENT_TIMESTAMP
         '''), {
             'user_id': user_id,
-            'week_date': week_date,
+            'start_date': start_date_str,
             'plan_data': json.dumps(meal_data, cls=DecimalEncoder)
         })
         
         # Save grocery list
         db.execute(text('''
-            INSERT INTO grocery_lists (user_id, week_date, grocery_data)
-            VALUES (:user_id, :week_date, :grocery_data)
-            ON CONFLICT (user_id, week_date)
+            INSERT INTO grocery_lists (user_id, start_date, grocery_data)
+            VALUES (:user_id, :start_date, :grocery_data)
+            ON CONFLICT (user_id, start_date)
             DO UPDATE SET
                 grocery_data = EXCLUDED.grocery_data,
                 updated_at = CURRENT_TIMESTAMP
         '''), {
             'user_id': user_id,
-            'week_date': week_date,
+            'start_date': start_date_str,
             'grocery_data': json.dumps(grocery_data, cls=DecimalEncoder)
         })
         
         db.commit()
         
-        flash('Your personalized plans have been created!', 'success')
+        flash('Your personalized plans have been created!', 'info')
         return redirect(url_for('dashboard'))
         
     except Exception as e:
@@ -1219,134 +1305,134 @@ def privacy_policy():
     current_date = datetime.now().strftime('%B %d, %Y')
     return render_template('privacy_policy.html', current_date=current_date)
 
-@app.route('/regenerate-workout', methods=['POST'])
-def regenerate_workout():
-    """Regenerate workout plan for current user"""
-    if 'user_id' not in session:
-        return jsonify({"error": "Not authenticated"}), 401
+# @app.route('/regenerate-workout', methods=['POST'])
+# def regenerate_workout():
+#     """Regenerate workout plan for current user"""
+#     if 'user_id' not in session:
+#         return jsonify({"error": "Not authenticated"}), 401
 
-    if not app.config.get('MEAL_API_AVAILABLE', True):
-        return jsonify({
-            "error": "Plan generation services are currently unavailable. Please try again later."
-        }), 503
+#     if not app.config.get('MEAL_API_AVAILABLE', True):
+#         return jsonify({
+#             "error": "Plan generation services are currently unavailable. Please try again later."
+#         }), 503
     
-    db = get_db()
-    try:
-        user_id = session['user_id']
-        workout_generator = WorkoutGenerator(exercise_db='exercises.db', user_id = user_id)
-        workout_plan = workout_generator.generate_weekly_plan(user_id)
+#     db = get_db()
+#     try:
+#         user_id = session['user_id']
+#         workout_generator = WorkoutGenerator(exercise_db='exercises.db', user_id = user_id)
+#         workout_plan = workout_generator.generate_weekly_plan(user_id)
         
-        # Update database
-        week_date = workout_plan['week_of']
+#         # Update database
+#         week_date = workout_plan['week_of']
         
-        db.execute(text('DELETE FROM workout_plans WHERE user_id = :user_id AND week_date = :week_date'),
-                    {'user_id': user_id, 'week_date': week_date})
+#         db.execute(text('DELETE FROM workout_plans WHERE user_id = :user_id AND week_date = :week_date'),
+#                     {'user_id': user_id, 'week_date': week_date})
         
-        db.execute(text('INSERT INTO workout_plans (user_id, week_date, plan_data) VALUES (:user_id, :week_date, :plan_data)'),
-                    {'user_id': user_id, 'week_date': week_date, 'plan_data': json.dumps(workout_plan,cls=DecimalEncoder)})
+#         db.execute(text('INSERT INTO workout_plans (user_id, week_date, plan_data) VALUES (:user_id, :week_date, :plan_data)'),
+#                     {'user_id': user_id, 'week_date': week_date, 'plan_data': json.dumps(workout_plan,cls=DecimalEncoder)})
         
-        db.commit()
+#         db.commit()
         
-        return jsonify({
-            "success": True,
-            "message": "Workout plan regenerated",
-            "redirect": url_for('dashboard')
-        }), 200
+#         return jsonify({
+#             "success": True,
+#             "message": "Workout plan regenerated",
+#             "redirect": url_for('dashboard')
+#         }), 200
         
-    except Exception as e:
-        db.rollback()
-        logger.error(f"Error regenerating workout: {e}")
-        return jsonify({"error": str(e)}), 500
-    finally:
-        close_db()
+#     except Exception as e:
+#         db.rollback()
+#         logger.error(f"Error regenerating workout: {e}")
+#         return jsonify({"error": str(e)}), 500
+#     finally:
+#         close_db()
 
 
-@app.route('/regenerate-meal-plan', methods=['POST'])
-def regenerate_meal_plan():
-    """Regenerate meal plan for current user"""
-    if 'user_id' not in session:
-        return jsonify({"error": "Not authenticated"}), 401
+# @app.route('/regenerate-meal-plan', methods=['POST'])
+# def regenerate_meal_plan():
+#     """Regenerate meal plan for current user"""
+#     if 'user_id' not in session:
+#         return jsonify({"error": "Not authenticated"}), 401
 
-    if not app.config.get('MEAL_API_AVAILABLE', True):
-        return jsonify({
-            "error": "Plan generation services are currently unavailable. Please try again later."
-        }), 503
+#     if not app.config.get('MEAL_API_AVAILABLE', True):
+#         return jsonify({
+#             "error": "Plan generation services are currently unavailable. Please try again later."
+#         }), 503
     
-    db = get_db()
-    try:
-        user_id = session['user_id']
+#     db = get_db()
+#     try:
+#         user_id = session['user_id']
         
-        # Get user data
-        result = db.execute(text('SELECT * FROM users WHERE id = :id'), {'id': user_id})
-        user = result.fetchone()
-        user_dict = dict(user._mapping)
+#         # Get user data
+#         result = db.execute(text('SELECT * FROM users WHERE id = :id'), {'id': user_id})
+#         user = result.fetchone()
+#         user_dict = dict(user._mapping)
         
-        # Parse dietary restrictions
-        dietary = []
-        if user_dict['dietary_restrictions']:
-            try:
-                restrictions = json.loads(user_dict['dietary_restrictions'])
-                dietary = [r.strip().lower() for r in restrictions if r.strip()]
-            except (json.JSONDecodeError, TypeError):
-                dietary = []
+#         # Parse dietary restrictions
+#         dietary = []
+#         if user_dict['dietary_restrictions']:
+#             try:
+#                 restrictions = json.loads(user_dict['dietary_restrictions'])
+#                 dietary = [r.strip().lower() for r in restrictions if r.strip()]
+#             except (json.JSONDecodeError, TypeError):
+#                 dietary = []
         
-        # Call API
-        logger.info(f"Regenerating meal plan for user {user_id}")
-        raw_meal_plan = meal_api.generate_meal_plan(
-            target_calories=int(user_dict['caloric_target'] or 2000),
-            dietary=dietary,
-            preferences=", ".join(dietary) if dietary else "",
-            num_days=7,
-            limit_per_meal=1
-        )
+#         # Call API
+#         logger.info(f"Regenerating meal plan for user {user_id}")
+#         raw_meal_plan = meal_api.generate_meal_plan(
+#             target_calories=int(user_dict['caloric_target'] or 2000),
+#             dietary=dietary,
+#             preferences=", ".join(dietary) if dietary else "",
+#             num_days=7,
+#             limit_per_meal=1
+#         )
         
-        if raw_meal_plan:
-            # Generate grocery list
-            grocery_data = generate_grocery_list_from_meals(raw_meal_plan)
+#         if raw_meal_plan:
+#             # Generate grocery list
+#             grocery_data = generate_grocery_list_from_meals(raw_meal_plan)
             
-            # Update database
-            week_date = datetime.now().strftime('%Y-%m-%d')
+#             # Update database
+#             week_date = datetime.now().strftime('%Y-%m-%d')
             
-            db.execute(text('DELETE FROM meal_plans WHERE user_id = :user_id AND week_date = :week_date'),
-                        {'user_id': user_id, 'week_date': week_date})
-            db.execute(text('INSERT INTO meal_plans (user_id, week_date, plan_data) VALUES (:user_id, :week_date, :plan_data)'),
-                        {'user_id': user_id, 'week_date': week_date, 'plan_data': json.dumps(raw_meal_plan,cls=DecimalEncoder)})
+#             db.execute(text('DELETE FROM meal_plans WHERE user_id = :user_id AND week_date = :week_date'),
+#                         {'user_id': user_id, 'week_date': week_date})
+#             db.execute(text('INSERT INTO meal_plans (user_id, week_date, plan_data) VALUES (:user_id, :week_date, :plan_data)'),
+#                         {'user_id': user_id, 'week_date': week_date, 'plan_data': json.dumps(raw_meal_plan,cls=DecimalEncoder)})
             
-            db.execute(text('DELETE FROM grocery_lists WHERE user_id = :user_id AND week_date = :week_date'),
-                        {'user_id': user_id, 'week_date': week_date})
-            db.execute(text('INSERT INTO grocery_lists (user_id, week_date, grocery_data) VALUES (:user_id, :week_date, :grocery_data)'),
-                        {'user_id': user_id, 'week_date': week_date, 'grocery_data': json.dumps(grocery_data,cls=DecimalEncoder)})
+#             db.execute(text('DELETE FROM grocery_lists WHERE user_id = :user_id AND week_date = :week_date'),
+#                         {'user_id': user_id, 'week_date': week_date})
+#             db.execute(text('INSERT INTO grocery_lists (user_id, week_date, grocery_data) VALUES (:user_id, :week_date, :grocery_data)'),
+#                         {'user_id': user_id, 'week_date': week_date, 'grocery_data': json.dumps(grocery_data,cls=DecimalEncoder)})
             
-            db.commit()
+#             db.commit()
             
-            return jsonify({
-                "success": True,
-                "message": "Meal plan regenerated",
-                "redirect": url_for('dashboard')
-            }), 200
-        else:
-            return jsonify({
-                "success": False,
-                "error": "Meal service unavailable"
-            }), 503
+#             return jsonify({
+#                 "success": True,
+#                 "message": "Meal plan regenerated",
+#                 "redirect": url_for('dashboard')
+#             }), 200
+#         else:
+#             return jsonify({
+#                 "success": False,
+#                 "error": "Meal service unavailable"
+#             }), 503
     
-    except MealPlanningAPIError as e:
-        db.rollback()
-        logger.error(f"Validation error: {str(e)}")
-        return jsonify({
-            "success": False,
-            "error": str(e)
-        }), 400
+#     except MealPlanningAPIError as e:
+#         db.rollback()
+#         logger.error(f"Validation error: {str(e)}")
+#         return jsonify({
+#             "success": False,
+#             "error": str(e)
+#         }), 400
     
-    except Exception as e:
-        db.rollback()
-        logger.error(f"Error regenerating meal plan: {str(e)}")
-        return jsonify({
-            "success": False,
-            "error": "Internal server error"
-        }), 500
-    finally:
-        close_db()
+#     except Exception as e:
+#         db.rollback()
+#         logger.error(f"Error regenerating meal plan: {str(e)}")
+#         return jsonify({
+#             "success": False,
+#             "error": "Internal server error"
+#         }), 500
+#     finally:
+#         close_db()
 
 
 @app.route('/api/service-status')
@@ -1367,7 +1453,8 @@ def dashboard():
         result = db.execute(text('SELECT * FROM users WHERE id = :id'), {'id': session['user_id']})
         user = result.fetchone()
         user_dict = dict(user._mapping)
-
+        user_tz = user_dict.get('timezone', 'UTC')
+        user_today = get_user_current_date(user_tz)       
         # logging.info(f"User dict: {user_dict}")
         
         # Get latest plans
@@ -1391,25 +1478,10 @@ def dashboard():
         grocery_data = ensure_dict(grocery_list.grocery_data) if grocery_list else None
 
         # Extract first day from meal_data for dashboard preview
-        first_day = None
-        if meal_data:
-            if isinstance(meal_data, list) and len(meal_data) > 0:
-                first_day = meal_data[0]
-            elif isinstance(meal_data, dict):
-                if 'days' in meal_data and meal_data['days']:
-                    first_day_key = next(iter(meal_data['days']))
-                    first_day = meal_data['days'][first_day_key]
-                    first_day['day_name'] = first_day_key
-                elif 'meal_plan' in meal_data and meal_data['meal_plan']:
-                    if isinstance(meal_data['meal_plan'], list):
-                        first_day = meal_data['meal_plan'][0]
-                    else:
-                        first_day_key = next(iter(meal_data['meal_plan']))
-                        first_day = meal_data['meal_plan'][first_day_key]
-                elif 'day_1' in meal_data:
-                    first_day = meal_data['day_1']
-                else:
-                    first_day = meal_data
+        current_day_number = 1
+        if meal_plan:
+            current_day_number = get_current_plan_day(meal_plan.start_date.strftime("%Y-%m-%d"), user_tz)        
+        display_day = min(current_day_number, 7)
         
         # Prepare nutrition targets
         nutrition_targets = None
@@ -1430,7 +1502,7 @@ def dashboard():
         return render_template('dashboard.html', 
                                 workout_plan=workout_data,
                                 meal_plan=meal_data,
-                                first_day=first_day,
+                                current_day=display_day,
                                 grocery_list=grocery_data,
                                 nutrition_targets=nutrition_targets,
                                 user_name=session.get('user_name'))
@@ -1444,27 +1516,35 @@ def workout_page():
     
     db = get_db()
     try:
-        # Calculate Monday of current week
-        monday = get_monday_of_week()
-        week_date = monday.strftime('%Y-%m-%d')
+        # Get user info and timezone
+        result = db.execute(text('SELECT * FROM users WHERE id = :id'), {'id': session['user_id']})
+        user = result.fetchone()
+        user_tz = dict(user._mapping).get('timezone', 'UTC')
+        user_today = get_user_current_date(user_tz)
         
-        # Get latest workout plan for current week
-        result = db.execute(text('''
+        # Find the active workout plan
+        query = text('''
             SELECT * FROM workout_plans 
-            WHERE user_id = :id AND week_date = :week_date
-            ORDER BY created_at DESC 
+            WHERE user_id = :id AND CAST(start_date AS DATE) <= :today 
+            ORDER BY start_date DESC, created_at DESC 
             LIMIT 1
-        '''), {'id': session['user_id'], 'week_date': week_date})
-        workout_plan = result.fetchone()
-
-        workout_data = ensure_dict(workout_plan.plan_data) if workout_plan else None
-
-        # Add formatted week range to workout data
-        if workout_data:
-            workout_data['week_range'] = get_week_date_range(monday)
+        ''')
         
+        workout_plan = db.execute(query, {'id': session['user_id'], 'today': user_today}).fetchone()
+        workout_data = ensure_dict(workout_plan.plan_data) if workout_plan else None
+        current_day_number = 1
+        
+        if workout_plan:
+            start_date_obj = workout_plan.start_date
+            start_date_str = start_date_obj.strftime('%Y-%m-%d')
+            current_day_number = get_current_plan_day(start_date_str, user_tz)
+            
+            # Add formatted week range to workout data
+            workout_data['week_range'] = get_week_date_range(start_date_obj)
+
         return render_template('workout.html', 
                                 workout_plan=workout_data,
+                                current_day=current_day_number, # Pass the current day
                                 user_name=session.get('user_name'))
     finally:
         close_db()
@@ -1476,35 +1556,39 @@ def meals_page():
     
     db = get_db()
     try:
-        # Calculate Monday of current week
-        monday = get_monday_of_week()
-        week_date = monday.strftime('%Y-%m-%d')
+        # Get user info and timezone
+        result = db.execute(text('SELECT * FROM users WHERE id = :id'), {'id': session['user_id']})
+        user = result.fetchone()
+        user_tz = dict(user._mapping).get('timezone', 'UTC')
+        user_today = get_user_current_date(user_tz)
         
-        # Get the MOST RECENT meal plan for the current week
-        result = db.execute(text('''
+        # Find the active meal plan
+        query = text('''
             SELECT * FROM meal_plans 
-            WHERE user_id = :id AND week_date = :week_date
-            ORDER BY created_at DESC 
+            WHERE user_id = :id AND CAST(start_date AS DATE) <= :today
+            ORDER BY start_date DESC, created_at DESC 
             LIMIT 1
-        '''), {'id': session['user_id'], 'week_date': week_date})
-        meal_plan = result.fetchone()
+        ''')
         
-        # If no plan for current week, redirect to profile summary
+        meal_plan = db.execute(query, {'id': session['user_id'], 'today': user_today}).fetchone()
+        
         if not meal_plan:
-            flash('No meal plan found for this week. Please create a new plan.', 'info')
+            flash('No meal plan found. Please create a new plan.', 'info')
             return redirect(url_for('profile_summary'))
         
         # Get the raw API data
         raw_meal_data = meal_plan.plan_data
         raw_meal_data = ensure_dict(raw_meal_data)
+        
+        # The start date object is needed for formatting
+        start_date_obj = meal_plan.start_date
+        start_date_str = start_date_obj.strftime('%Y-%m-%d')
 
-        # logger.info(f"Raw meal data for user {session['user_id']}: {raw_meal_data}")
+        # Format for display with actual dates based on rolling start_date
+        formatted_meal_data = transform_meal_plan_for_templates(raw_meal_data, start_date_obj)
         
-        # Format for display with actual dates
-        formatted_meal_data = meal_api.format_for_display(raw_meal_data, monday)
-        
-        # Get current day number (1-7, where Monday=1)
-        current_day_number = get_day_number()
+        # Get current day number (1-7)
+        current_day_number = get_current_plan_day(start_date_str, user_tz)
         
         return render_template('meals.html',
                                 meal_plan=formatted_meal_data,
