@@ -1305,136 +1305,6 @@ def privacy_policy():
     current_date = datetime.now().strftime('%B %d, %Y')
     return render_template('privacy_policy.html', current_date=current_date)
 
-# @app.route('/regenerate-workout', methods=['POST'])
-# def regenerate_workout():
-#     """Regenerate workout plan for current user"""
-#     if 'user_id' not in session:
-#         return jsonify({"error": "Not authenticated"}), 401
-
-#     if not app.config.get('MEAL_API_AVAILABLE', True):
-#         return jsonify({
-#             "error": "Plan generation services are currently unavailable. Please try again later."
-#         }), 503
-    
-#     db = get_db()
-#     try:
-#         user_id = session['user_id']
-#         workout_generator = WorkoutGenerator(exercise_db='exercises.db', user_id = user_id)
-#         workout_plan = workout_generator.generate_weekly_plan(user_id)
-        
-#         # Update database
-#         week_date = workout_plan['week_of']
-        
-#         db.execute(text('DELETE FROM workout_plans WHERE user_id = :user_id AND week_date = :week_date'),
-#                     {'user_id': user_id, 'week_date': week_date})
-        
-#         db.execute(text('INSERT INTO workout_plans (user_id, week_date, plan_data) VALUES (:user_id, :week_date, :plan_data)'),
-#                     {'user_id': user_id, 'week_date': week_date, 'plan_data': json.dumps(workout_plan,cls=DecimalEncoder)})
-        
-#         db.commit()
-        
-#         return jsonify({
-#             "success": True,
-#             "message": "Workout plan regenerated",
-#             "redirect": url_for('dashboard')
-#         }), 200
-        
-#     except Exception as e:
-#         db.rollback()
-#         logger.error(f"Error regenerating workout: {e}")
-#         return jsonify({"error": str(e)}), 500
-#     finally:
-#         close_db()
-
-
-# @app.route('/regenerate-meal-plan', methods=['POST'])
-# def regenerate_meal_plan():
-#     """Regenerate meal plan for current user"""
-#     if 'user_id' not in session:
-#         return jsonify({"error": "Not authenticated"}), 401
-
-#     if not app.config.get('MEAL_API_AVAILABLE', True):
-#         return jsonify({
-#             "error": "Plan generation services are currently unavailable. Please try again later."
-#         }), 503
-    
-#     db = get_db()
-#     try:
-#         user_id = session['user_id']
-        
-#         # Get user data
-#         result = db.execute(text('SELECT * FROM users WHERE id = :id'), {'id': user_id})
-#         user = result.fetchone()
-#         user_dict = dict(user._mapping)
-        
-#         # Parse dietary restrictions
-#         dietary = []
-#         if user_dict['dietary_restrictions']:
-#             try:
-#                 restrictions = json.loads(user_dict['dietary_restrictions'])
-#                 dietary = [r.strip().lower() for r in restrictions if r.strip()]
-#             except (json.JSONDecodeError, TypeError):
-#                 dietary = []
-        
-#         # Call API
-#         logger.info(f"Regenerating meal plan for user {user_id}")
-#         raw_meal_plan = meal_api.generate_meal_plan(
-#             target_calories=int(user_dict['caloric_target'] or 2000),
-#             dietary=dietary,
-#             preferences=", ".join(dietary) if dietary else "",
-#             num_days=7,
-#             limit_per_meal=1
-#         )
-        
-#         if raw_meal_plan:
-#             # Generate grocery list
-#             grocery_data = generate_grocery_list_from_meals(raw_meal_plan)
-            
-#             # Update database
-#             week_date = datetime.now().strftime('%Y-%m-%d')
-            
-#             db.execute(text('DELETE FROM meal_plans WHERE user_id = :user_id AND week_date = :week_date'),
-#                         {'user_id': user_id, 'week_date': week_date})
-#             db.execute(text('INSERT INTO meal_plans (user_id, week_date, plan_data) VALUES (:user_id, :week_date, :plan_data)'),
-#                         {'user_id': user_id, 'week_date': week_date, 'plan_data': json.dumps(raw_meal_plan,cls=DecimalEncoder)})
-            
-#             db.execute(text('DELETE FROM grocery_lists WHERE user_id = :user_id AND week_date = :week_date'),
-#                         {'user_id': user_id, 'week_date': week_date})
-#             db.execute(text('INSERT INTO grocery_lists (user_id, week_date, grocery_data) VALUES (:user_id, :week_date, :grocery_data)'),
-#                         {'user_id': user_id, 'week_date': week_date, 'grocery_data': json.dumps(grocery_data,cls=DecimalEncoder)})
-            
-#             db.commit()
-            
-#             return jsonify({
-#                 "success": True,
-#                 "message": "Meal plan regenerated",
-#                 "redirect": url_for('dashboard')
-#             }), 200
-#         else:
-#             return jsonify({
-#                 "success": False,
-#                 "error": "Meal service unavailable"
-#             }), 503
-    
-#     except MealPlanningAPIError as e:
-#         db.rollback()
-#         logger.error(f"Validation error: {str(e)}")
-#         return jsonify({
-#             "success": False,
-#             "error": str(e)
-#         }), 400
-    
-#     except Exception as e:
-#         db.rollback()
-#         logger.error(f"Error regenerating meal plan: {str(e)}")
-#         return jsonify({
-#             "success": False,
-#             "error": "Internal server error"
-#         }), 500
-#     finally:
-#         close_db()
-
-
 @app.route('/api/service-status')
 def service_status_api():
     """Expose the current availability of generation services."""
@@ -1646,11 +1516,11 @@ def generate_workout_plan():
         workout_plan = workout_generator.generate_weekly_plan(user_id)
         
         # Save to database
-        week_date = workout_plan['week_of']
+        start_date = workout_plan['week_of']
         
         # Check if plan already exists for this week
-        result = db.execute(text('SELECT id FROM workout_plans WHERE user_id = :user_id AND week_date = :week_date'),
-                {'user_id': user_id, 'week_date': week_date})
+        result = db.execute(text('SELECT id FROM workout_plans WHERE user_id = :user_id AND start_date = :start_date'),
+                {'user_id': user_id, 'start_date': start_date})
         existing = result.fetchone()
         
         if existing:
@@ -1659,8 +1529,8 @@ def generate_workout_plan():
                         {'plan_data': json.dumps(workout_plan,cls=DecimalEncoder), 'id': existing.id})
         else:
             # Insert new plan
-            db.execute(text('INSERT INTO workout_plans (user_id, week_date, plan_data) VALUES (:user_id, :week_date, :plan_data)'),
-                        {'user_id': user_id, 'week_date': week_date, 'plan_data': json.dumps(workout_plan,cls=DecimalEncoder)})
+            db.execute(text('INSERT INTO workout_plans (user_id, start_date, plan_data) VALUES (:user_id, :start_date, :plan_data)'),
+                        {'user_id': user_id, 'start_date': start_date, 'plan_data': json.dumps(workout_plan,cls=DecimalEncoder)})
         
         db.commit()
         
@@ -1771,14 +1641,10 @@ def update_grocery_item():
         item_name = data['name']
         checked = bool(data['checked'])
         
-        # Get current week's grocery list
-        monday = get_monday_of_week()
-        week_date = monday.strftime('%Y-%m-%d')
-        
-        result = db.execute(text('''
-            SELECT id, grocery_data FROM grocery_lists 
-            WHERE user_id = :user_id AND week_date = :week_date
-        '''), {'user_id': user_id, 'week_date': week_date})
+       # Get user nutrition data
+            
+        result = db.execute(text('SELECT * FROM grocery_lists WHERE user_id = :id ORDER BY created_at DESC LIMIT 1'), 
+                                {'id':user_id})
         grocery_record = result.fetchone()
         
         if not grocery_record:
