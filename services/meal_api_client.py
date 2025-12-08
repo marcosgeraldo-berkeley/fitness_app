@@ -254,6 +254,12 @@ class MealPlanningAPI:
                     if 'u' not in ingredient or ingredient['u'] is None:
                         logger.warning(f"Missing unit in ingredient: {ingredient}")
                         ingredient['u'] = 'units'
+                    if 'f' not in ingredient or ingredient['f'] is None:
+                        logger.warning(f"Missing unit family in ingredient: {ingredient}")
+                        ingredient['f'] = 'count'
+                    if 'm' not in ingredient or ingredient['m'] is None:
+                        logger.warning(f"Missing merge ingredient in ingredient: {ingredient}")
+                        ingredient['m'] = ingredient['n']  # use name as merge key if missing
                 
                 if meal_merge_ingredients:
                     merge_ingredients.append(meal_merge_ingredients)
