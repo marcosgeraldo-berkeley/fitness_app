@@ -166,6 +166,7 @@ class WorkoutGenerator:
             5: [5, 6],
             7: [7]
         }
+        workout_schedule = int(workout_schedule)
         user_range = preference_ranges.get(workout_schedule, [3, 4])
         
         # Ideal days by fitness goal (research-based)
